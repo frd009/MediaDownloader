@@ -93,7 +93,7 @@ def get_video_formats(media_url):
         '--no-check-certificate',
         '--geo-bypass',
         '--no-playlist',
-        '--user-agent', USER_AGENT, # <-- PERBAIKAN: Tambahkan User-Agent
+        '--user-agent', USER_AGENT, 
         media_url
     ]
     
@@ -110,6 +110,14 @@ def get_video_formats(media_url):
             command.extend(['--cookies', YOUTUBE_COOKIES])
         else:
             print("Peringatan: File cookie YouTube tidak ditemukan.")
+            
+    # --- PERBAIKAN: Gunakan yt-dlp untuk ambil format Instagram ---
+    if "instagram.com" in media_url:
+        print("Mendeteksi URL Instagram, menambahkan file cookie...")
+        if os.path.exists(INSTAGRAM_COOKIES):
+            command.extend(['--cookies', INSTAGRAM_COOKIES])
+        else:
+            print("Peringatan: File cookie Instagram tidak ditemukan.")
     
     try:
         result = subprocess.run(
@@ -121,47 +129,71 @@ def get_video_formats(media_url):
             timeout=60
         )
         
-        data = json.loads(result.stdout)
-        title = data.get('title', 'Judul Tidak Diketahui')
-        formats = data.get('formats', [])
-        
+        # --- PERBAIKAN: Tangani output JSONL (banyak JSON dalam satu baris) dari Instagram ---
+        # Instagram carousel/reels kadang mengembalikan beberapa JSON, satu per baris
         parsed_formats = []
+        final_title = 'Judul Tidak Diketahui'
         
-        for f in formats:
-            format_id = f.get('format_id')
-            ext = f.get('ext')
-            height = f.get('height')
-            format_note = f.get('format_note')
+        for line in result.stdout.strip().split('\n'):
+            if not line:
+                continue
+                
+            data = json.loads(line)
+            final_title = data.get('title', final_title) # Ambil judul
             
-            if not format_note:
-                if height:
-                    format_note = f"{height}p"
-                else:
-                    format_note = "Audio"
+            # Jika ini adalah 'entry' (seperti dalam galeri), proses 'formats' di dalamnya
+            if '_type' in data and data['_type'] == 'video' and 'formats' in data:
+                formats = data.get('formats', [])
+            # Jika ini adalah galeri, cari entri
+            elif 'entries' in data:
+                # Untuk galeri, kita tidak bisa memilih format, paksa unduh semua
+                print("Mendeteksi Galeri Instagram. Akan mengunduh semua sebagai zip.")
+                return {"status": "success", "title": final_title, "formats": [{"id": "instagram_gallery_zip", "text": "Unduh Galeri (Semua Gambar/Video) sebagai .zip"}]}
+            # Jika ini video tunggal
+            else:
+                formats = data.get('formats', [])
 
-            abr = f.get('abr')
-            audio_note = f" ({abr}k)" if abr else ""
-            
-            if (f.get('vcodec') != 'none' and f.get('acodec') != 'none' and height and height <= 1080):
-                parsed_formats.append({
-                    "id": format_id,
-                    "text": f"Video {format_note} ({ext}){audio_note} [Tergabung]"
-                })
-            elif (f.get('vcodec') != 'none' and f.get('acodec') == 'none' and height and height <= 1080):
-                 parsed_formats.append({
-                    "id": f"{format_id}+bestaudio", 
-                    "text": f"Video {format_note} ({ext}) + Audio Terbaik [Gabung]"
-                })
-            elif (f.get('vcodec') == 'none' and f.get('acodec') != 'none' and ext in ['m4a', 'mp3', 'opus']):
-                 parsed_formats.append({
-                    "id": format_id,
-                    "text": f"Audio Saja {format_note} ({ext}){audio_note}"
-                })
+            for f in formats:
+                format_id = f.get('format_id')
+                ext = f.get('ext')
+                height = f.get('height')
+                format_note = f.get('format_note')
+                
+                if not format_note:
+                    if height:
+                        format_note = f"{height}p"
+                    else:
+                        format_note = "Audio"
+
+                abr = f.get('abr')
+                audio_note = f" ({abr}k)" if abr else ""
+                
+                if (f.get('vcodec') != 'none' and f.get('acodec') != 'none' and height and height <= 1080):
+                    parsed_formats.append({
+                        "id": format_id,
+                        "text": f"Video {format_note} ({ext}){audio_note} [Tergabung]"
+                    })
+                elif (f.get('vcodec') != 'none' and f.get('acodec') == 'none' and height and height <= 1080):
+                     parsed_formats.append({
+                        "id": f"{format_id}+bestaudio", 
+                        "text": f"Video {format_note} ({ext}) + Audio Terbaik [Gabung]"
+                    })
+                elif (f.get('vcodec') == 'none' and f.get('acodec') != 'none' and ext in ['m4a', 'mp3', 'opus']):
+                     parsed_formats.append({
+                        "id": format_id,
+                        "text": f"Audio Saja {format_note} ({ext}){audio_note}"
+                    })
 
         unique_formats = list({f['text']: f for f in parsed_formats}.values())
         
+        # Jika setelah semua parsing tidak ada format video (misal: postingan gambar IG tunggal)
+        if not unique_formats:
+             print("Tidak ada format video terpisah, asumsikan gambar/postingan tunggal.")
+             return {"status": "success", "title": final_title, "formats": [{"id": "best", "text": "Unduh Postingan (Gambar/Video Kualitas Terbaik)"}]}
+
+        
         print(f"Menemukan {len(unique_formats)} format yang relevan.")
-        return {"status": "success", "title": title, "formats": unique_formats}
+        return {"status": "success", "title": final_title, "formats": unique_formats}
 
     except subprocess.CalledProcessError as e:
         print(f"Error mengambil format: {e}")
@@ -171,7 +203,9 @@ def get_video_formats(media_url):
         error_details = e.stderr
         if 'Sign in to confirm' in error_details:
             error_details = "Gagal: YouTube meminta verifikasi (Sign in to confirm you're not a bot). Ini biasanya karena cookie YouTube tidak ada, tidak valid, atau kedaluwarsa. Harap perbarui cookie Anda."
-        
+        if 'HTTP redirect to login page' in error_details:
+             error_details = "Gagal: Instagram mengalihkan ke halaman login. Ini 100% berarti cookie Instagram Anda tidak valid atau kedaluwarsa. Harap perbarui."
+
         return {"status": "error", "message": "Gagal mengambil format video.", "details": error_details}
 
     except Exception as e:
@@ -217,30 +251,40 @@ def download_media():
     try:
         command = []
         
-        # --- KASUS 1: GALERI (Instagram, Pinterest, TikTok) ---
-        if download_format == "gallery_dl_zip":
-            print("Menggunakan gallery-dl (alur Zip)...")
+        # --- PERBAIKAN LOGIKA: PISAHKAN INSTAGRAM DARI GALLERY_DL ---
+        
+        # KASUS 1: GALLERY-DL (Hanya untuk Pinterest/TikTok)
+        # Frontend mengirim 'gallery_dl_zip' untuk IG, TikTok, Pinterest.
+        if download_format == "gallery_dl_zip" and ("instagram.com" not in media_url):
+            print("Menggunakan gallery-dl (alur Zip untuk TikTok/Pinterest)...")
             tool_used = "gallery-dl"
             command = [
                 'python', '-m', 'gallery_dl',
                 '--no-check-certificate',
                 '--sleep', '2-4',  
-                '--user-agent', USER_AGENT, # <-- PERBAIKAN: Tambahkan User-Agent
+                '--user-agent', USER_AGENT, 
             ]
             
-            # Tambahkan cookie jika ada
-            if os.path.exists(INSTAGRAM_COOKIES):
-                command.extend(['--cookies', INSTAGRAM_COOKIES])
             if os.path.exists(TIKTOK_COOKIES):
                 command.extend(['--cookies', TIKTOK_COOKIES])
 
             command.extend(['-d', output_subdir, media_url])
         
-        # --- KASUS 2: VIDEO (YouTube, Twitter) ---
+        # KASUS 2: YT-DLP (Untuk YouTube, Twitter, dan sekarang INSTAGRAM)
         else:
+            # Jika format dari 'gallery_dl_zip' tapi itu Instagram, ganti format jadi 'best'
+            if download_format == "gallery_dl_zip" and "instagram.com" in media_url:
+                print(f"Mengalihkan Instagram dari gallery-dl ke yt-dlp...")
+                download_format = 'bestvideo+bestaudio/best' # Format default untuk IG
+            
+            # Jika format khusus 'instagram_gallery_zip' dari get_formats
+            if download_format == "instagram_gallery_zip":
+                 print(f"Menggunakan yt-dlp untuk galeri Instagram...")
+                 download_format = 'bestvideo+bestaudio/best' # Unduh semua
+            
             print(f"Menggunakan yt-dlp (format ID: {download_format})...")
             tool_used = "yt-dlp"
-            output_template = os.path.join(output_subdir, '%(title)s.%(ext)s')
+            output_template = os.path.join(output_subdir, '%(title)s - %(id)s.%(ext)s') # Tambahkan ID agar unik
             
             command = [
                 'python', '-m', 'yt_dlp',
@@ -249,9 +293,8 @@ def download_media():
                 '--no-playlist',
                 '-f', download_format, 
                 '--merge-output-format', 'mp4',
-                # --- PERBAIKAN: Tentukan lokasi ffmpeg ---
-                '--ffmpeg-location', '/usr/bin/ffmpeg', 
-                '--user-agent', USER_AGENT, # <-- PERBAIKAN: Tambahkan User-Agent
+                # --- PERBAIKAN: Hapus path ffmpeg yang salah ---
+                '--user-agent', USER_AGENT,
                 # --- AKHIR PERBAIKAN ---
                 '-o', output_template,
                 media_url
@@ -270,6 +313,14 @@ def download_media():
                     command.extend(['--cookies', YOUTUBE_COOKIES])
                 else:
                     print("Peringatan: File cookie YouTube tidak ditemukan.")
+            
+            # --- PERBAIKAN: Tambahkan cookie untuk Instagram di yt-dlp ---
+            if "instagram.com" in media_url:
+                print("Mendeteksi URL Instagram, menambahkan file cookie untuk yt-dlp...")
+                if os.path.exists(INSTAGRAM_COOKIES):
+                    command.extend(['--cookies', INSTAGRAM_COOKIES])
+                else:
+                    print("Peringatan: File cookie Instagram tidak ditemukan (untuk yt-dlp).")
             
             if 'mp3' in download_format or 'audio' in download_format.lower():
                  command.extend(['-x', '--audio-format', 'mp3'])
@@ -304,6 +355,11 @@ def download_media():
         print(f"Total file ditemukan (secara rekursif): {len(all_files)}")
 
         if not all_files:
+            # --- PERBAIKAN: Beri pesan error yang lebih baik jika tidak ada file ---
+            # Cek stderr untuk petunjuk
+            stderr_lower = result.stderr.lower()
+            if 'login' in stderr_lower or 'cookies' in stderr_lower:
+                 raise Exception("Proses selesai tetapi tidak ada file yang ditemukan. Ini kemungkinan besar karena cookie tidak valid atau kedaluwarsa.")
             raise Exception("File diunduh tetapi tidak dapat ditemukan oleh server.")
         
         elif len(all_files) > 1:
@@ -314,7 +370,7 @@ def download_media():
             shutil.make_archive(zip_base_path, 'zip', output_subdir)
             
             return_filename = f"{zip_filename_no_ext}.zip"
-            message = f"Unduhan carousel/galeri berhasil ({len(all_files)} file di-zip)!"
+            message = f"Unduhan galeri/carousel berhasil ({len(all_files)} file di-zip)!"
             print(f"File Zip dibuat: {return_filename}")
 
         else:
@@ -322,6 +378,13 @@ def download_media():
             full_path = all_files[0]
             single_file_name = os.path.basename(full_path)
             dst_path = os.path.join(DOWNLOAD_DIR, single_file_name)
+            
+            # Hindari menimpa file jika ada nama yang sama (jarang terjadi)
+            if os.path.exists(dst_path):
+                name, ext = os.path.splitext(single_file_name)
+                single_file_name = f"{name}-{unique_id}{ext}"
+                dst_path = os.path.join(DOWNLOAD_DIR, single_file_name)
+                
             shutil.move(full_path, dst_path)
             
             return_filename = single_file_name
@@ -346,15 +409,17 @@ def download_media():
         error_details = e.stderr
         if '429 Too Many Requests' in error_details:
              error_details = "Gagal: Instagram memblokir permintaan karena terlalu sering (429 Too Many Requests). Ini biasanya karena cookie yang tidak valid atau kedaluwarsa. Harap perbarui cookie Anda di environment variables."
-        elif 'login required' in error_details.lower():
-             error_details = "Gagal: Instagram memerlukan login. Pastikan cookie Anda valid dan terbaru."
+        elif 'login required' in error_details.lower() or 'redirect to login page' in error_details:
+             error_details = "Gagal: Instagram/TikTok memerlukan login. Ini 100% berarti cookie Anda tidak valid atau kedaluwarsa. Harap perbarui."
         elif 'Sign in to confirm' in error_details:
              error_details = "Gagal: YouTube meminta verifikasi (Sign in to confirm you're not a bot). Ini biasanya karena cookie YouTube tidak ada, tidak valid, atau kedaluwarsa. Harap perbarui cookie Anda."
+        elif 'Signature extraction failed' in error_details:
+             error_details = "Gagal: YouTube Signature extraction failed. Server sedang memperbarui yt-dlp, silakan coba lagi dalam 1 menit."
 
         return jsonify({"error": f"Gagal mengunduh media dengan {tool_used}.", "details": error_details}), 500
     except Exception as e:
         print(f"Terjadi error tak terduga: {e}")
-        return jsonify({"error": "Terjadi error internal server."}), 500
+        return jsonify({"error": f"Terjadi error internal server: {str(e)}"}), 500
     
     finally:
         if os.path.exists(output_subdir):
