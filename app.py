@@ -150,16 +150,25 @@ def get_video_formats(media_url):
                 abr = f.get('abr')
                 audio_note = f" ({abr}k)" if abr else ""
                 
-                if (f.get('vcodec') != 'none' and f.get('acodec') != 'none' and height and height <= 1080):
+                # --- PERBAIKAN: HANYA cari format yang SUDAH digabung (video+audio) ---
+                # Kita batasi di 720p, karena 1080p ke atas hampir tidak ada yang pre-merged
+                if (f.get('vcodec') != 'none' and f.get('acodec') != 'none' and height and height <= 720):
                     parsed_formats.append({
                         "id": format_id,
-                        "text": f"Video {format_note} ({ext}){audio_note} [Tergabung]"
+                        # Ubah teksnya agar lebih jelas
+                        "text": f"Video {format_note} ({ext}){audio_note} [Telah Digabung]"
                     })
-                elif (f.get('vcodec') != 'none' and f.get('acodec') == 'none' and height and height <= 1080):
-                     parsed_formats.append({
-                        "id": f"{format_id}+bestaudio", 
-                        "text": f"Video {format_note} ({ext}) + Audio Terbaik [Gabung]"
-                    })
+                
+                # --- HAPUS BLOK INI ---
+                # Kita tidak lagi menawarkan format terpisah yang perlu digabung,
+                # karena inilah yang menyebabkan file tidak bisa di-play.
+                # elif (f.get('vcodec') != 'none' and f.get('acodec') == 'none' and height and height <= 1080):
+                #      parsed_formats.append({
+                #         "id": f"{format_id}+bestaudio", 
+                #         "text": f"Video {format_note} ({ext}) + Audio Terbaik [Gabung]"
+                #     })
+                # --- AKHIR BLOK PENGHAPUSAN ---
+                
                 elif (f.get('vcodec') == 'none' and f.get('acodec') != 'none' and ext in ['m4a', 'mp3', 'opus']):
                      parsed_formats.append({
                         "id": format_id,
@@ -274,7 +283,9 @@ def download_media():
                 '--no-playlist',
                 '--user-agent', USER_AGENT,
                 '-f', download_format,
-                '--merge-output-format', 'mp4',
+                # --- HAPUS BARIS INI ---
+                # Karena kita tidak lagi menggabungkan, baris ini tidak diperlukan
+                # '--merge-output-format', 'mp4', 
                 '-o', output_template,
                 media_url
             ]
