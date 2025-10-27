@@ -15,7 +15,10 @@ DOWNLOAD_TIMEOUT = 300  # 5 menit
 INSTAGRAM_COOKIES = "instagram_cookies.txt"
 TWITTER_COOKIES = "twitter_cookies.txt" 
 TIKTOK_COOKIES = "tiktok_cookies.txt" 
-YOUTUBE_COOKIES = "youtube_cookies.txt" # <-- 1. TAMBAHKAN INI
+YOUTUBE_COOKIES = "youtube_cookies.txt"
+
+# --- PERBAIKAN: Tambahkan User-Agent Browser ---
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
 
 # --- PERSIAPAN DEPLOYMENT: Tulis Cookies dari Environment Variables ---
 def write_cookies_from_env():
@@ -24,7 +27,7 @@ def write_cookies_from_env():
     insta_cookie_data_b64 = os.environ.get('INSTA_COOKIE_B64_DATA')
     twitter_cookie_data_b64 = os.environ.get('TWITTER_COOKIE_B64_DATA')
     tiktok_cookie_data_b64 = os.environ.get('TIKTOK_COOKIE_B64_DATA')
-    youtube_cookie_data_b64 = os.environ.get('YOUTUBE_COOKIE_B64_DATA') # <-- 2. TAMBAHKAN INI
+    youtube_cookie_data_b64 = os.environ.get('YOUTUBE_COOKIE_B64_DATA')
 
     try:
         if insta_cookie_data_b64:
@@ -48,14 +51,12 @@ def write_cookies_from_env():
         else:
             print(f"Peringatan: TIKTOK_COOKIE_B64_DATA env variable tidak ditemukan.")
 
-        # --- 3. TAMBAHKAN BLOK INI ---
         if youtube_cookie_data_b64:
             with open(YOUTUBE_COOKIES, 'wb') as f:
                 f.write(base64.b64decode(youtube_cookie_data_b64))
             print(f"Berhasil menulis {YOUTUBE_COOKIES} dari env variable Base64.")
         else:
             print(f"Peringatan: YOUTUBE_COOKIE_B64_DATA env variable tidak ditemukan.")
-        # --- BATAS AKHIR BLOK ---
             
     except Exception as e:
         print(f"ERROR: Gagal mendekode atau menulis file cookie dari Base64. {e}")
@@ -92,6 +93,7 @@ def get_video_formats(media_url):
         '--no-check-certificate',
         '--geo-bypass',
         '--no-playlist',
+        '--user-agent', USER_AGENT, # <-- PERBAIKAN: Tambahkan User-Agent
         media_url
     ]
     
@@ -102,14 +104,12 @@ def get_video_formats(media_url):
         else:
             print("Peringatan: File cookie Twitter tidak ditemukan.")
     
-    # --- 4. TAMBAHKAN BLOK INI ---
     if "youtube.com" in media_url or "youtu.be" in media_url:
         print("Mendeteksi URL YouTube, menambahkan file cookie...")
         if os.path.exists(YOUTUBE_COOKIES):
             command.extend(['--cookies', YOUTUBE_COOKIES])
         else:
             print("Peringatan: File cookie YouTube tidak ditemukan.")
-    # --- BATAS AKHIR BLOK ---
     
     try:
         result = subprocess.run(
@@ -168,13 +168,11 @@ def get_video_formats(media_url):
         print(f"[yt-dlp] stdout:", e.stdout)
         print(f"[yt-dlp] stderr:", e.stderr)
         
-        # --- 5. TAMBAHKAN PENANGANAN ERROR INI ---
         error_details = e.stderr
         if 'Sign in to confirm' in error_details:
             error_details = "Gagal: YouTube meminta verifikasi (Sign in to confirm you're not a bot). Ini biasanya karena cookie YouTube tidak ada, tidak valid, atau kedaluwarsa. Harap perbarui cookie Anda."
         
         return {"status": "error", "message": "Gagal mengambil format video.", "details": error_details}
-        # --- BATAS AKHIR PERUBAHAN ---
 
     except Exception as e:
         print(f"Error tak terduga saat mengambil format: {e}")
@@ -227,6 +225,7 @@ def download_media():
                 'python', '-m', 'gallery_dl',
                 '--no-check-certificate',
                 '--sleep', '2-4',  
+                '--user-agent', USER_AGENT, # <-- PERBAIKAN: Tambahkan User-Agent
             ]
             
             # Tambahkan cookie jika ada
@@ -250,6 +249,10 @@ def download_media():
                 '--no-playlist',
                 '-f', download_format, 
                 '--merge-output-format', 'mp4',
+                # --- PERBAIKAN: Tentukan lokasi ffmpeg ---
+                '--ffmpeg-location', '/usr/bin/ffmpeg', 
+                '--user-agent', USER_AGENT, # <-- PERBAIKAN: Tambahkan User-Agent
+                # --- AKHIR PERBAIKAN ---
                 '-o', output_template,
                 media_url
             ]
@@ -261,14 +264,12 @@ def download_media():
                 else:
                     print("Peringatan: File cookie Twitter tidak ditemukan.")
             
-            # --- 6. TAMBAHKAN BLOK INI ---
             if "youtube.com" in media_url or "youtu.be" in media_url:
                 print("Mendeteksi URL YouTube, menambahkan file cookie...")
                 if os.path.exists(YOUTUBE_COOKIES):
                     command.extend(['--cookies', YOUTUBE_COOKIES])
                 else:
                     print("Peringatan: File cookie YouTube tidak ditemukan.")
-            # --- BATAS AKHIR BLOK ---
             
             if 'mp3' in download_format or 'audio' in download_format.lower():
                  command.extend(['-x', '--audio-format', 'mp3'])
@@ -347,7 +348,6 @@ def download_media():
              error_details = "Gagal: Instagram memblokir permintaan karena terlalu sering (429 Too Many Requests). Ini biasanya karena cookie yang tidak valid atau kedaluwarsa. Harap perbarui cookie Anda di environment variables."
         elif 'login required' in error_details.lower():
              error_details = "Gagal: Instagram memerlukan login. Pastikan cookie Anda valid dan terbaru."
-        # --- 7. TAMBAHKAN PENANGANAN ERROR INI ---
         elif 'Sign in to confirm' in error_details:
              error_details = "Gagal: YouTube meminta verifikasi (Sign in to confirm you're not a bot). Ini biasanya karena cookie YouTube tidak ada, tidak valid, atau kedaluwarsa. Harap perbarui cookie Anda."
 
