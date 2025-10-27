@@ -1,1 +1,1 @@
-web: python -m yt_dlp --update-to nightly && python app.py
+web: python -m pip install -r requirements.txt && python -m pip install --upgrade yt-dlp && python app.py
