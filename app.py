@@ -342,7 +342,7 @@ def download_media():
             command,
             capture_output=True,
             text=True,
-            check=True,
+            check=False, # <-- PERBAIKAN: Ubah dari True ke False
             encoding='utf-8',
             timeout=DOWNLOAD_TIMEOUT
         )
@@ -362,17 +362,25 @@ def download_media():
         
         print(f"Total file ditemukan (secara rekursif): {len(all_files)}")
 
+        # --- PERBAIKAN: Logika pengecekan file yang lebih baik ---
+        # Cek manual, karena yt-dlp bisa error (returncode != 0) saat mengunduh
+        # foto Instagram ("No video formats found") MESKIPUN sukses.
         if not all_files:
-            # --- PERBAIKAN: Beri pesan error yang lebih baik jika tidak ada file ---
-            # Cek stderr untuk petunjuk
-            stderr_lower = result.stderr.lower()
-            if 'login' in stderr_lower or 'cookies' in stderr_lower:
-                 raise Exception("Proses selesai tetapi tidak ada file yang ditemukan. Ini kemungkinan besar karena cookie tidak valid atau kedaluwarsa.")
-            # --- PERBAIKAN: Tangani error "No video formats found" (kemungkinan foto) ---
-            if "No video formats found!" in stderr_lower:
-                 raise Exception("Proses selesai tetapi tidak ada file yang ditemukan. Postingan ini mungkin adalah Teks Saja (Text-Only).")
-            # --- AKHIR PERBAIKAN ---
-            raise Exception("File diunduh tetapi tidak dapat ditemukan oleh server.")
+            # Jika tidak ada file, periksa apakah subprocess GAGAL.
+            if result.returncode != 0:
+                print("subprocess gagal DAN tidak ada file yang ditemukan.")
+                # Lempar error agar ditangkap 'except' block
+                raise subprocess.CalledProcessError(
+                    result.returncode, 
+                    command, 
+                    output=result.stdout, 
+                    stderr=result.stderr
+                )
+            else:
+                # Subprocess sukses (returncode 0) tapi tidak ada file? Aneh.
+                raise Exception("Proses unduhan berhasil tetapi tidak ada file yang ditemukan.")
+        
+        # --- Jika kita sampai di sini, all_files TIDAK kosong ---
         
         elif len(all_files) > 1:
             print(f"Menemukan {len(all_files)} file. Membuat file .zip...")
