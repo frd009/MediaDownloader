@@ -15,6 +15,7 @@ DOWNLOAD_TIMEOUT = 300  # 5 menit
 INSTAGRAM_COOKIES = "instagram_cookies.txt"
 TWITTER_COOKIES = "twitter_cookies.txt" 
 TIKTOK_COOKIES = "tiktok_cookies.txt" 
+YOUTUBE_COOKIES = "youtube_cookies.txt" # <-- 1. TAMBAHKAN INI
 
 # --- PERSIAPAN DEPLOYMENT: Tulis Cookies dari Environment Variables ---
 def write_cookies_from_env():
@@ -23,6 +24,7 @@ def write_cookies_from_env():
     insta_cookie_data_b64 = os.environ.get('INSTA_COOKIE_B64_DATA')
     twitter_cookie_data_b64 = os.environ.get('TWITTER_COOKIE_B64_DATA')
     tiktok_cookie_data_b64 = os.environ.get('TIKTOK_COOKIE_B64_DATA')
+    youtube_cookie_data_b64 = os.environ.get('YOUTUBE_COOKIE_B64_DATA') # <-- 2. TAMBAHKAN INI
 
     try:
         if insta_cookie_data_b64:
@@ -45,6 +47,15 @@ def write_cookies_from_env():
             print(f"Berhasil menulis {TIKTOK_COOKIES} dari env variable Base64.")
         else:
             print(f"Peringatan: TIKTOK_COOKIE_B64_DATA env variable tidak ditemukan.")
+
+        # --- 3. TAMBAHKAN BLOK INI ---
+        if youtube_cookie_data_b64:
+            with open(YOUTUBE_COOKIES, 'wb') as f:
+                f.write(base64.b64decode(youtube_cookie_data_b64))
+            print(f"Berhasil menulis {YOUTUBE_COOKIES} dari env variable Base64.")
+        else:
+            print(f"Peringatan: YOUTUBE_COOKIE_B64_DATA env variable tidak ditemukan.")
+        # --- BATAS AKHIR BLOK ---
             
     except Exception as e:
         print(f"ERROR: Gagal mendekode atau menulis file cookie dari Base64. {e}")
@@ -55,15 +66,14 @@ def write_cookies_from_env():
 
 app = Flask(__name__)
 
-# --- PERBAIKAN: KONFIGURASI CORS SPESIFIK UNTUK INFINITYFREE ---
-# Baris 'CORS(app)' dihapus dan diganti dengan ini:
+# --- KONFIGURASI CORS SPESIFIK UNTUK INFINITYFREE ---
 FRONTEND_DOMAIN = "https://mediadown.kesug.com" 
 
 CORS(app, resources={
     r"/api/*": {"origins": FRONTEND_DOMAIN},
     r"/downloads/*": {"origins": FRONTEND_DOMAIN}
 })
-# --- AKHIR PERBAIKAN CORS ---
+# --- AKHIR KONFIGURASI CORS ---
 
 
 if not os.path.exists(DOWNLOAD_DIR):
@@ -91,6 +101,15 @@ def get_video_formats(media_url):
             command.extend(['--cookies', TWITTER_COOKIES])
         else:
             print("Peringatan: File cookie Twitter tidak ditemukan.")
+    
+    # --- 4. TAMBAHKAN BLOK INI ---
+    if "youtube.com" in media_url or "youtu.be" in media_url:
+        print("Mendeteksi URL YouTube, menambahkan file cookie...")
+        if os.path.exists(YOUTUBE_COOKIES):
+            command.extend(['--cookies', YOUTUBE_COOKIES])
+        else:
+            print("Peringatan: File cookie YouTube tidak ditemukan.")
+    # --- BATAS AKHIR BLOK ---
     
     try:
         result = subprocess.run(
@@ -148,7 +167,15 @@ def get_video_formats(media_url):
         print(f"Error mengambil format: {e}")
         print(f"[yt-dlp] stdout:", e.stdout)
         print(f"[yt-dlp] stderr:", e.stderr)
-        return {"status": "error", "message": "Gagal mengambil format video.", "details": e.stderr}
+        
+        # --- 5. TAMBAHKAN PENANGANAN ERROR INI ---
+        error_details = e.stderr
+        if 'Sign in to confirm' in error_details:
+            error_details = "Gagal: YouTube meminta verifikasi (Sign in to confirm you're not a bot). Ini biasanya karena cookie YouTube tidak ada, tidak valid, atau kedaluwarsa. Harap perbarui cookie Anda."
+        
+        return {"status": "error", "message": "Gagal mengambil format video.", "details": error_details}
+        # --- BATAS AKHIR PERUBAHAN ---
+
     except Exception as e:
         print(f"Error tak terduga saat mengambil format: {e}")
         return {"status": "error", "message": "Error server internal saat parsing format.", "details": str(e)}
@@ -198,7 +225,8 @@ def download_media():
             tool_used = "gallery-dl"
             command = [
                 'python', '-m', 'gallery_dl',
-                '--no-check-certificate'
+                '--no-check-certificate',
+                '--sleep', '2-4',  
             ]
             
             # Tambahkan cookie jika ada
@@ -232,6 +260,15 @@ def download_media():
                     command.extend(['--cookies', TWITTER_COOKIES])
                 else:
                     print("Peringatan: File cookie Twitter tidak ditemukan.")
+            
+            # --- 6. TAMBAHKAN BLOK INI ---
+            if "youtube.com" in media_url or "youtu.be" in media_url:
+                print("Mendeteksi URL YouTube, menambahkan file cookie...")
+                if os.path.exists(YOUTUBE_COOKIES):
+                    command.extend(['--cookies', YOUTUBE_COOKIES])
+                else:
+                    print("Peringatan: File cookie YouTube tidak ditemukan.")
+            # --- BATAS AKHIR BLOK ---
             
             if 'mp3' in download_format or 'audio' in download_format.lower():
                  command.extend(['-x', '--audio-format', 'mp3'])
@@ -304,7 +341,17 @@ def download_media():
         print(f"Error menjalankan {tool_used}: {e}")
         print(f"[{tool_used}] stdout:", e.stdout)
         print(f"[{tool_used}] stderr:", e.stderr)
-        return jsonify({"error": f"Gagal mengunduh media dengan {tool_used}.", "details": e.stderr}), 500
+        # --- PERBAIKAN PESAN ERROR ---
+        error_details = e.stderr
+        if '429 Too Many Requests' in error_details:
+             error_details = "Gagal: Instagram memblokir permintaan karena terlalu sering (429 Too Many Requests). Ini biasanya karena cookie yang tidak valid atau kedaluwarsa. Harap perbarui cookie Anda di environment variables."
+        elif 'login required' in error_details.lower():
+             error_details = "Gagal: Instagram memerlukan login. Pastikan cookie Anda valid dan terbaru."
+        # --- 7. TAMBAHKAN PENANGANAN ERROR INI ---
+        elif 'Sign in to confirm' in error_details:
+             error_details = "Gagal: YouTube meminta verifikasi (Sign in to confirm you're not a bot). Ini biasanya karena cookie YouTube tidak ada, tidak valid, atau kedaluwarsa. Harap perbarui cookie Anda."
+
+        return jsonify({"error": f"Gagal mengunduh media dengan {tool_used}.", "details": error_details}), 500
     except Exception as e:
         print(f"Terjadi error tak terduga: {e}")
         return jsonify({"error": "Terjadi error internal server."}), 500
