@@ -47,22 +47,26 @@ def write_cookies_from_env():
 
 app = Flask(__name__)
 
-# --- Konfigurasi CORS ---
-# PERBAIKAN: Domain ini dikembalikan ke URL FRONTEND Anda yang sebenarnya.
-FRONTEND_DOMAIN = "https.mediadown.kesug.com" 
+# --- PERBAIKAN CORS ---
+# Izinkan domain 'www' dan domain 'polos' (tanpa www) secara eksplisit.
+ALLOWED_FRONTEND_ORIGINS = [
+    "https.mediadown.kesug.com",      # Domain utama
+    "https://www.mediadown.kesug.com" # Jika pengguna mengakses via www
+]
 
 CORS(app, resources={
     r"/api/*": {
-        "origins": FRONTEND_DOMAIN,
+        "origins": ALLOWED_FRONTEND_ORIGINS,
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     },
     r"/downloads/*": {
-        "origins": FRONTEND_DOMAIN,
+        "origins": ALLOWED_FRONTEND_ORIGINS,
         "methods": ["GET", "OPTIONS"], 
         "allow_headers": ["Content-Type"]
     }
 })
+# --- AKHIR PERBAIKAN CORS ---
 
 
 if not os.path.exists(DOWNLOAD_DIR):
