@@ -280,17 +280,7 @@ def download_media():
         
         # KASUS 2: YT-DLP (Untuk YouTube, Twitter, dan sekarang INSTAGRAM)
         else:
-            # Jika format dari 'gallery_dl_zip' tapi itu Instagram, ganti format jadi 'best'
-            if download_format == "gallery_dl_zip" and "instagram.com" in media_url:
-                print(f"Mengalihkan Instagram dari gallery-dl ke yt-dlp...")
-                download_format = 'best' # Format 'best' akan mengambil gambar atau video
-            
-            # Jika format khusus 'instagram_gallery_zip' dari get_formats
-            if download_format == "instagram_gallery_zip":
-                 print(f"Menggunakan yt-dlp untuk galeri Instagram...")
-                 download_format = 'bestvideo+bestaudio/best' # Unduh semua
-            
-            print(f"Menggunakan yt-dlp (format ID: {download_format})...")
+            print(f"Menggunakan yt-dlp...")
             tool_used = "yt-dlp"
             output_template = os.path.join(output_subdir, '%(title)s - %(id)s.%(ext)s') # Tambahkan ID agar unik
             
@@ -299,14 +289,22 @@ def download_media():
                 '--no-check-certificate',
                 '--geo-bypass',
                 '--no-playlist',
-                '-f', download_format, 
-                '--merge-output-format', 'mp4',
-                # --- PERBAIKAN: Hapus path ffmpeg yang salah ---
                 '--user-agent', USER_AGENT,
-                # --- AKHIR PERBAIKAN ---
                 '-o', output_template,
                 media_url
             ]
+
+            # --- PERBAIKAN BESAR: Hapus '-f' untuk Instagram ---
+            # JANGAN tentukan format (-f) untuk Instagram. Biarkan yt-dlp
+            # mengunduh semua item (foto/video) secara default.
+            if "instagram.com" not in media_url:
+                print(f"Bukan Instagram, menambahkan format: {download_format}")
+                command.extend(['-f', download_format])
+                command.extend(['--merge-output-format', 'mp4']) # Hanya merge jika bukan IG
+            else:
+                print("Mendeteksi Instagram, MENGHAPUS '-f' agar foto bisa diunduh.")
+            # --- AKHIR PERBAIKAN ---
+
             
             if "twitter.com" in media_url or "x.com" in media_url:
                 print("Mendeteksi URL Twitter/X, menambahkan file cookie...")
@@ -331,7 +329,9 @@ def download_media():
                     print("Peringatan: File cookie Instagram tidak ditemukan (untuk yt-dlp).")
             
             if 'mp3' in download_format or 'audio' in download_format.lower():
-                 command.extend(['-x', '--audio-format', 'mp3'])
+                 # Pastikan ini tidak dijalankan untuk IG carousel (sudah ditangani oleh 'if not instagram')
+                 if "instagram.com" not in media_url:
+                    command.extend(['-x', '--audio-format', 'mp3'])
 
         
         # --- Jalankan Perintah ---
@@ -437,6 +437,7 @@ def download_media():
              error_details = "Gagal: YouTube Signature extraction failed. Server sedang memperbarui yt-dlp, silakan coba lagi dalam 1 menit."
         # --- PERBAIKAN: Tangani error "No video formats found" (kemungkinan foto) ---
         elif "No video formats found!" in error_details and "instagram.com" in media_url:
+            # Ini seharusnya tidak terjadi jika 'check=False' berfungsi, tapi sebagai cadangan
             error_details = "Gagal: Postingan ini terdeteksi sebagai FOTO, tetapi terjadi error saat mencoba mengunduhnya. (No video formats found!)"
         # --- AKHIR PERBAIKAN ---
 
