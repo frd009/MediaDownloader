@@ -1,0 +1,16 @@
+Abaikan folder unduhan
+
+/downloaded_videos/
+
+Abaikan file cookie LOKAL Anda
+
+*.txt
+
+Abaikan file Python cache
+
+pycache/
+*.pyc
+
+Abaikan environment file
+
+.env
