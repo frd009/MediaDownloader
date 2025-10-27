@@ -5,7 +5,7 @@ from flask_cors import CORS
 import os
 import uuid
 import shutil
-import base64 # <-- 1. Tambahkan import base64
+import base64
 
 # --- Konfigurasi ---
 DOWNLOAD_DIR = "downloaded_videos"
@@ -17,23 +17,15 @@ TWITTER_COOKIES = "twitter_cookies.txt"
 TIKTOK_COOKIES = "tiktok_cookies.txt" 
 
 # --- PERSIAPAN DEPLOYMENT: Tulis Cookies dari Environment Variables ---
-# Di Railway, Anda akan mengatur environment variables.
-# Kode ini akan mengambil data dari sana dan menuliskannya ke file
-# yang dibutuhkan oleh yt-dlp dan gallery-dl.
-
 def write_cookies_from_env():
     print("Memeriksa environment variables untuk cookies...")
     
-    # --- 2. Ganti nama variabel (B64) dan ubah logikanya ---
-    
-    # Ambil data cookie dari environment variables (format Base64)
     insta_cookie_data_b64 = os.environ.get('INSTA_COOKIE_B64_DATA')
     twitter_cookie_data_b64 = os.environ.get('TWITTER_COOKIE_B64_DATA')
     tiktok_cookie_data_b64 = os.environ.get('TIKTOK_COOKIE_B64_DATA')
 
     try:
         if insta_cookie_data_b64:
-            # Tulis dalam mode 'wb' (write bytes)
             with open(INSTAGRAM_COOKIES, 'wb') as f:
                 f.write(base64.b64decode(insta_cookie_data_b64))
             print(f"Berhasil menulis {INSTAGRAM_COOKIES} dari env variable Base64.")
@@ -62,7 +54,17 @@ def write_cookies_from_env():
 
 
 app = Flask(__name__)
-CORS(app)
+
+# --- PERBAIKAN: KONFIGURASI CORS SPESIFIK UNTUK INFINITYFREE ---
+# Baris 'CORS(app)' dihapus dan diganti dengan ini:
+FRONTEND_DOMAIN = "https://mediadown.kesug.com" 
+
+CORS(app, resources={
+    r"/api/*": {"origins": FRONTEND_DOMAIN},
+    r"/downloads/*": {"origins": FRONTEND_DOMAIN}
+})
+# --- AKHIR PERBAIKAN CORS ---
+
 
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR)
