@@ -48,7 +48,8 @@ def write_cookies_from_env():
 app = Flask(__name__)
 
 # --- Konfigurasi CORS ---
-FRONTEND_DOMAIN = "https.mediadown.kesug.com" 
+# PERBAIKAN: Domain ini diubah agar sesuai dengan URL frontend Anda di Railway
+FRONTEND_DOMAIN = "https://web-production-11f7.up.railway.app" 
 
 CORS(app, resources={
     r"/api/*": {
