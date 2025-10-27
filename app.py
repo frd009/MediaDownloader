@@ -201,6 +201,14 @@ def get_video_formats(media_url):
         print(f"[yt-dlp] stderr:", e.stderr)
         
         error_details = e.stderr
+        
+        # --- PERBAIKAN: Tangani error "No video formats found" (kemungkinan ini foto) ---
+        if "No video formats found!" in error_details and "instagram.com" in media_url:
+            print("Terdeteksi 'No video formats found' untuk Instagram. Diasumsikan ini adalah postingan FOTO.")
+            # Kita tidak tahu judulnya, jadi gunakan placeholder
+            return {"status": "success", "title": "Postingan Instagram", "formats": [{"id": "best", "text": "Unduh Postingan (Gambar/Video Kualitas Terbaik)"}]}
+        # --- AKHIR PERBAIKAN ---
+
         if 'Sign in to confirm' in error_details:
             error_details = "Gagal: YouTube meminta verifikasi (Sign in to confirm you're not a bot). Ini biasanya karena cookie YouTube tidak ada, tidak valid, atau kedaluwarsa. Harap perbarui cookie Anda."
         if 'HTTP redirect to login page' in error_details:
@@ -275,7 +283,7 @@ def download_media():
             # Jika format dari 'gallery_dl_zip' tapi itu Instagram, ganti format jadi 'best'
             if download_format == "gallery_dl_zip" and "instagram.com" in media_url:
                 print(f"Mengalihkan Instagram dari gallery-dl ke yt-dlp...")
-                download_format = 'bestvideo+bestaudio/best' # Format default untuk IG
+                download_format = 'best' # Format 'best' akan mengambil gambar atau video
             
             # Jika format khusus 'instagram_gallery_zip' dari get_formats
             if download_format == "instagram_gallery_zip":
@@ -360,6 +368,10 @@ def download_media():
             stderr_lower = result.stderr.lower()
             if 'login' in stderr_lower or 'cookies' in stderr_lower:
                  raise Exception("Proses selesai tetapi tidak ada file yang ditemukan. Ini kemungkinan besar karena cookie tidak valid atau kedaluwarsa.")
+            # --- PERBAIKAN: Tangani error "No video formats found" (kemungkinan foto) ---
+            if "No video formats found!" in stderr_lower:
+                 raise Exception("Proses selesai tetapi tidak ada file yang ditemukan. Postingan ini mungkin adalah Teks Saja (Text-Only).")
+            # --- AKHIR PERBAIKAN ---
             raise Exception("File diunduh tetapi tidak dapat ditemukan oleh server.")
         
         elif len(all_files) > 1:
@@ -415,6 +427,10 @@ def download_media():
              error_details = "Gagal: YouTube meminta verifikasi (Sign in to confirm you're not a bot). Ini biasanya karena cookie YouTube tidak ada, tidak valid, atau kedaluwarsa. Harap perbarui cookie Anda."
         elif 'Signature extraction failed' in error_details:
              error_details = "Gagal: YouTube Signature extraction failed. Server sedang memperbarui yt-dlp, silakan coba lagi dalam 1 menit."
+        # --- PERBAIKAN: Tangani error "No video formats found" (kemungkinan foto) ---
+        elif "No video formats found!" in error_details and "instagram.com" in media_url:
+            error_details = "Gagal: Postingan ini terdeteksi sebagai FOTO, tetapi terjadi error saat mencoba mengunduhnya. (No video formats found!)"
+        # --- AKHIR PERBAIKAN ---
 
         return jsonify({"error": f"Gagal mengunduh media dengan {tool_used}.", "details": error_details}), 500
     except Exception as e:
