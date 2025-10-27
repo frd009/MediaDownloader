@@ -304,7 +304,10 @@ def download_media():
                  # Sukses tapi 0 file (kasus aneh)
                 raise Exception("Proses unduhan selesai tanpa error, tetapi tidak ada file yang ditemukan.")
         
-        elif len(all_files) > 1 or tool_used == "gallery-dl":
+        # --- PERBAIKAN BUG CAROUSEL ---
+        # Hapus 'or tool_used == "gallery-dl"' agar foto tunggal tidak di-zip
+        elif len(all_files) > 1:
+        # --- AKHIR PERBAIKAN ---
             print(f"Menemukan {len(all_files)} file. Membuat file .zip...")
             # --- FIX 10: Tambahkan timestamp ke zip ---
             zip_filename_no_ext = f"{unique_id}_gallery_{int(time.time())}"
