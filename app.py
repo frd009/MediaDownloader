@@ -47,7 +47,8 @@ def write_cookies_from_env():
 
 app = Flask(__name__)
 
-# --- FIX 6: Perluas konfigurasi CORS untuk preflight OPTIONS ---
+# --- Konfigurasi CORS ---
+# (Memperbolehkan frontend Anda untuk mengakses)
 FRONTEND_DOMAIN = "https://mediadown.kesug.com" 
 
 CORS(app, resources={
@@ -58,28 +59,15 @@ CORS(app, resources={
     },
     r"/downloads/*": {
         "origins": FRONTEND_DOMAIN,
-        "methods": ["GET", "OPTIONS"], # Tambahkan OPTIONS
+        "methods": ["GET", "OPTIONS"], 
         "allow_headers": ["Content-Type"]
     }
 })
-# --- AKHIR FIX 6 ---
 
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR)
 
-# --- FUNGSI HELPER BARU: Mendapatkan ukuran file ---
-def _get_filesize_mb(f):
-    """Mencoba mendapatkan ukuran file dalam MB dari data format."""
-    size = f.get('filesize') or f.get('filesize_approx')
-    if size:
-        try:
-            return f"{int(size) / (1024 * 1024):.2f}"
-        except Exception:
-            return "N/A"
-    return "N/A"
-
 # --- FUNGSI HELPER: Mengambil Format Video (Langkah 1) ---
-# --- DIPERBARUI TOTAL UNTUK MEMPERBAIKI MASALAH SUARA & RESOLUSI ---
 def get_video_formats(media_url):
     print(f"Mengambil format untuk: {media_url}")
     
@@ -110,103 +98,79 @@ def get_video_formats(media_url):
             text=True,
             check=True,
             encoding='utf-8',
-            errors='replace',  # FIX 7: Tambahkan error handling
+            errors='replace',  
             timeout=60
         )
         
-        # Inisialisasi daftar format
         parsed_formats = []
         final_title = "Judul Tidak Diketahui"
         
-        # yt-dlp -j dapat mengeluarkan beberapa JSON (satu per video di playlist)
-        # Kita hanya ambil yang pertama.
+        # Iterasi melalui setiap baris output JSON (meskipun --no-playlist, beberapa link menghasilkan >1)
         for line in result.stdout.strip().split('\n'):
             try:
                 data = json.loads(line)
-            except json.JSONDecodeError:
-                print(f"Peringatan: Melewatkan baris JSON yang tidak valid: {line}")
-                continue
+                final_title = data.get('title', final_title)
                 
-            final_title = data.get('title', final_title)
+                # --- PERBAIKAN LOGIKA FORMAT (Suara & Resolusi) ---
+                if data.get('formats'):
+                    print("Memindai format video...")
+                    for f in data['formats']:
+                        # Kita hanya ingin format yang SUDAH memiliki video DAN audio
+                        # Acodec 'none' berarti tidak ada audio. Vcodec 'none' berarti tidak ada video.
+                        if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                            # Coba dapatkan resolusi dan ukuran file
+                            height = f.get('height')
+                            filesize_approx = f.get('filesize_approx') or f.get('filesize')
+                            
+                            # Buat teks deskripsi
+                            text = f.get('format_note', f.get('format_id', 'Format tidak diketahui'))
+                            if height:
+                                text = f"{height}p"
+                                
+                            if filesize_approx:
+                                size_mb = filesize_approx / (1024 * 1024)
+                                text += f" (~{size_mb:.1f} MB)"
+                            
+                            parsed_formats.append({
+                                "id": f['format_id'],
+                                "text": text
+                            })
+                
+                # Opsi Audio Saja (Selalu tawarkan ini sebagai fallback)
+                parsed_formats.append({
+                    "id": "bestaudio/best",
+                    "text": "Audio Saja (Unduh terbaik, konversi ke MP3)"
+                })
+                # --- AKHIR PERBAIKAN ---
+
+                # Hanya proses data JSON pertama yang valid
+                break 
             
-            if 'formats' not in data:
+            except json.JSONDecodeError:
+                print(f"Peringatan: Melewatkan baris output non-JSON: {line}")
                 continue
-
-            print("Mem-parsing format yang ditemukan...")
-            for f in data['formats']:
-                filesize_mb = _get_filesize_mb(f)
-                format_id = f.get('format_id')
-                ext = f.get('ext', 'N/A')
-                
-                # Lewati manifest (bukan file download langsung)
-                if ext in ('m3u8', 'mpd') or not format_id:
-                    continue
-                
-                vcodec = f.get('vcodec', 'none')
-                acodec = f.get('acodec', 'none')
-
-                # KASUS 1: Video + Audio (Format terbaik, sudah digabung)
-                if vcodec != 'none' and acodec != 'none':
-                    height = f.get('height')
-                    if not height:
-                        try:
-                            # Coba ekstrak dari resolusi
-                            height = str(f.get('resolution')).split('x')[-1]
-                        except Exception:
-                            height = 'N/A'
-
-                    note = f.get('format_note', f"{height}p")
-                    
-                    # Pastikan 'p' ada di format note jika itu angka
-                    if str(height).isdigit() and 'p' not in str(note):
-                        note = f"{height}p"
-                    elif 'p' not in str(note):
-                         note = f"{height} ({note})"
-
-
-                    text = f"Video: {note} ({ext.upper()}) - {filesize_mb} MB"
-                    parsed_formats.append({"id": format_id, "text": text})
-
-                # KASUS 2: Audio Saja
-                elif vcodec == 'none' and acodec != 'none':
-                    note = f.get('format_note', f.get('acodec', 'Audio'))
-                    # Ganti nama 'ultra'/'low' dll.
-                    if 'abr' in f:
-                        note = f"{f.get('abr')}k"
-                    
-                    text = f"Audio: {note} ({ext.upper()}) - {filesize_mb} MB"
-                    parsed_formats.append({"id": format_id, "text": text})
-                
-                # KASUS 3: Video Saja (Kita abaikan untuk menghindari masalah 'tidak ada suara')
-                # else:
-                #    pass 
-
-            # Hentikan loop setelah data JSON pertama (non-playlist) diproses
-            break 
         
         if not parsed_formats:
-             print("Tidak ada format V+A atau A-Only yang ditemukan.")
-             # Fallback jika TIDAK ADA V+A ditemukan (sangat jarang)
-             # Coba minta yt-dlp menggabungkan yang terbaik
+             print("Tidak ada format V+A yang ditemukan. Menawarkan fallback.")
+             # Fallback jika tidak ada format V+A (video terpisah)
              parsed_formats = [
                 {
-                    "id": "bestvideo[height<=1080]+bestaudio/best[height<=1080]", # Lebih spesifik
-                    "text": "Video: Kualitas Terbaik (Coba Penggabungan 1080p)"
+                    "id": "bestvideo+bestaudio/best",
+                    "text": "Video Terbaik (Pisah, digabung)"
                 },
                 {
                     "id": "bestaudio/best",
-                    "text": "Audio: Kualitas Terbaik (MP3)"
+                    "text": "Audio Saja (MP3)"
                 }
-             ]
-             print("Fallback: Menawarkan opsi penggabungan 'bestvideo+bestaudio'.")
-        
-        # Bersihkan duplikat (jika ada)
+            ]
+
+        # Hapus duplikat (terutama untuk 'Audio Saja')
         unique_formats = []
-        seen_texts = set()
+        seen_ids = set()
         for f in parsed_formats:
-            if f['text'] not in seen_texts:
+            if f['id'] not in seen_ids:
                 unique_formats.append(f)
-                seen_texts.add(f['text'])
+                seen_ids.add(f['id'])
         
         print(f"Menemukan {len(unique_formats)} format yang relevan.")
         return {"status": "success", "title": final_title, "formats": unique_formats}
@@ -224,7 +188,6 @@ def get_video_formats(media_url):
     except Exception as e:
         print(f"Error tak terduga saat mengambil format: {e}")
         return {"status": "error", "message": "Error server internal saat parsing format.", "details": str(e)}
-# --- AKHIR PEMBARUAN FUNGSI ---
 
 
 # --- ENDPOINT (Langkah 1) ---
@@ -235,13 +198,12 @@ def api_get_formats():
     if not media_url:
         return jsonify({"error": "URL tidak diberikan"}), 400
 
-    # --- FIX 1 & 2: Skip format selection untuk gallery-dl targets ---
+    # Lewati pemilihan format untuk platform galeri
     if "instagram.com" in media_url or "tiktok.com" in media_url or "pinterest.com" in media_url:
         return jsonify({
             "status": "skip_format_selection",
             "message": "Platform ini langsung mengunduh tanpa pilihan format"
         })
-    # --- AKHIR FIX 1 & 2 ---
 
     result = get_video_formats(media_url)
     
@@ -267,8 +229,7 @@ def download_media():
     output_subdir = os.path.join(DOWNLOAD_DIR, unique_id)
     os.makedirs(output_subdir)
     
-    return_filename_for_link = ""   # Nama file aman di server (misal: uuid_nama.mp4)
-    return_filename_for_download = "" # Nama file asli (misal: nama asli.mp4)
+    return_filename = ""
     tool_used = ""
     result = None # Inisialisasi result
     
@@ -282,11 +243,11 @@ def download_media():
             command = [
                 'python', '-m', 'gallery_dl',
                 '--no-check-certificate',
-                '--sleep', '2-4', # Tambahkan jeda
-                '--user-agent', USER_AGENT
+                '--sleep', '2-4', 
+                '--user-agent', USER_AGENT,
+                '--write-metadata', # Minta metadata (untuk file .txt)
             ]
             
-            # Tambahkan cookie jika ada
             if "instagram.com" in media_url and os.path.exists(INSTAGRAM_COOKIES):
                 command.extend(['--cookies', INSTAGRAM_COOKIES])
             if "tiktok.com" in media_url and os.path.exists(TIKTOK_COOKIES):
@@ -298,25 +259,20 @@ def download_media():
         else:
             print(f"Menggunakan yt-dlp (format ID: {download_format})...")
             tool_used = "yt-dlp"
-            # Template nama file yang lebih bersih
-            output_template = os.path.join(output_subdir, '%(title)s.%(ext)s') # Nama file lebih bersih
+            output_template = os.path.join(output_subdir, '%(title)s - %(id)s.%(ext)s')
             
-            # --- DIPERBARUI: Logika unduh disederhanakan ---
             command = [
                 'python', '-m', 'yt_dlp',
                 '--no-check-certificate',
                 '--geo-bypass',
                 '--no-playlist',
                 '--user-agent', USER_AGENT,
-                '-f', download_format, # ID format spesifik, cth: '22' atau 'bestvideo+bestaudio'
+                '-f', download_format,
                 '-o', output_template,
                 media_url
             ]
             
-            # --- PERBAIKAN ERROR 0xc00d36e6 & AUDIO ---
-            
             # KASUS A: Format HANYA AUDIO
-            # (Jika ID format adalah 'bestaudio/best' atau hanya berisi audio)
             if 'audio' in download_format.lower() and 'video' not in download_format.lower():
                 print("Mendeteksi format audio, menambahkan -x --audio-format mp3")
                 command.extend(['-x', '--audio-format', 'mp3'])
@@ -325,7 +281,6 @@ def download_media():
             else:
                 # --- PERBAIKAN ERROR 0xc00d36e6 ---
                 # Paksa remux ke MP4 container. Ini memperbaiki 0xc00d36e6 di Windows
-                # dengan membersihkan container file, tanpa re-encoding (cepat).
                 print("Mendeteksi format video. Memaksa remux ke MP4 untuk kompatibilitas.")
                 command.extend(['--remux-video', 'mp4'])
                 # --- AKHIR PERBAIKAN ---
@@ -337,7 +292,7 @@ def download_media():
             if "youtube.com" in media_url or "youtu.be" in media_url:
                 if os.path.exists(YOUTUBE_COOKIES):
                     command.extend(['--cookies', YOUTUBE_COOKIES])
-            
+
         
         # --- Jalankan Perintah ---
         print(f"Akan menjalankan perintah: {' '.join(command)}")
@@ -347,9 +302,9 @@ def download_media():
             command,
             capture_output=True,
             text=True,
-            check=False, # Jangan crash jika return code != 0
+            check=False, 
             encoding='utf-8',
-            errors='replace', # FIX 7: Tambahkan error handling
+            errors='replace',
             timeout=DOWNLOAD_TIMEOUT
         )
         
@@ -357,90 +312,80 @@ def download_media():
         print(f"[{tool_used}] stdout:", result.stdout)
         print(f"[{tool_used}] stderr:", result.stderr)
         
-        # --- Logika Pemrosesan Hasil (Zipping & Pencarian Rekursif) ---
+        # --- Logika Pemrosesan Hasil ---
         print(f"Memeriksa hasil di: {output_subdir}")
         
         all_files = []
         for root, dirs, files in os.walk(output_subdir):
             for file in files:
-                # --- PERBAIKAN: Tangani file .part dan .ytdl ---
-                if file.endswith(('.part', '.ytdl')): continue
-                # --- AKHIR PERBAIKAN ---
+                # Abaikan file parsial atau file tersembunyi
+                if file.endswith('.part') or file.startswith('.'): continue
                 full_path = os.path.join(root, file)
                 all_files.append(full_path)
         
-        # --- FIX 8: Filter file 0-byte ---
+        # Filter file 0-byte
         all_files = [f for f in all_files if os.path.getsize(f) > 0]
         print(f"Total file valid ditemukan (rekursif, >0 byte): {len(all_files)}")
-        # --- AKHIR FIX 8 ---
 
-        # --- PERBAIKAN MASALAH ZIP: Filter untuk file media saja ---
-        MEDIA_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.mov', '.avi', '.mkv', '.webm', '.mp3', '.m4a', '.ogg', '.wav') # Tambahkan audio
+        # --- PERBAIKAN MASALAH CAROUSEL (Mulai) ---
+        # Definisikan ekstensi media untuk membedakan dari file .txt/.json
+        MEDIA_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.mov', '.mkv', '.avi')
+        
         media_files = [f for f in all_files if f.lower().endswith(MEDIA_EXTENSIONS)]
-        print(f"Ditemukan {len(media_files)} file media dari total {len(all_files)} file.")
-        # --- AKHIR PERBAIKAN ---
+        print(f"Menemukan {len(media_files)} file media.")
 
-        if not media_files: # Periksa media_files, bukan all_files
-            # Jika tidak ada file MEDIA, cek return code
+        if not media_files:
+            # Jika tidak ada file media, cek return code
             if result.returncode != 0:
                 print(f"subprocess gagal DAN tidak ada file media yang ditemukan.")
                 error_detail = result.stderr
                 if "login required" in error_detail or "HTTP redirect to login page" in error_detail:
                     error_message = f"Gagal: {tool_used} memerlukan login (cookie mungkin kedaluwarsa)."
-                elif "No video formats found" in error_detail or "is not a valid URL" in error_detail:
-                     error_message = "Gagal: URL tidak valid atau postingan tidak dapat diunduh (mungkin foto?)."
+                elif "No video formats found" in error_detail or "No media found" in error_detail:
+                     error_message = "Gagal: Postingan ini (mungkin text-only) tidak dapat diunduh."
                 else:
                     error_message = f"Gagal menjalankan {tool_used}."
                 return jsonify({"error": error_message, "details": error_detail}), 500
             else:
-                 # Sukses tapi 0 file media (kasus aneh)
+                 # Sukses tapi 0 file (kasus aneh)
                 raise Exception("Proses unduhan selesai tanpa error, tetapi tidak ada file media yang ditemukan.")
         
-        # --- PERBAIKAN MASALAH ZIP: Gunakan hitungan media_files untuk logika ZIP ---
+        # KASUS 1: LEBIH DARI 1 FILE MEDIA (Carousel/Galeri) -> BUAT ZIP
         elif len(media_files) > 1:
-        # --- AKHIR PERBAIKAN ---
-            print(f"Menemukan {len(media_files)} file media (total {len(all_files)} file). Membuat file .zip...")
-            # --- FIX 10: Tambahkan timestamp ke zip ---
+            print(f"Menemukan {len(media_files)} file media. Membuat file .zip...")
             zip_filename_no_ext = f"{unique_id}_gallery_{int(time.time())}"
-            # --- AKHIR FIX 10 ---
             zip_base_path = os.path.join(DOWNLOAD_DIR, zip_filename_no_ext)
             
-            # Kita tetap men-zip seluruh output_subdir untuk menyertakan file non-media (seperti caption)
+            # Kita zip seluruh direktori (termasuk .txt jika ada)
             shutil.make_archive(zip_base_path, 'zip', output_subdir)
             
-            return_filename_for_link = f"{zip_filename_no_ext}.zip"
-            return_filename_for_download = return_filename_for_link
-            
-            message = f"Unduhan carousel/galeri berhasil ({len(media_files)} file media di-zip)!" # Perbarui pesan
-            print(f"File Zip dibuat: {return_filename_for_link}")
+            return_filename = f"{zip_filename_no_ext}.zip"
+            message = f"Unduhan carousel/galeri berhasil ({len(media_files)} media di-zip)!"
+            print(f"File Zip dibuat: {return_filename}")
 
-        else: # Ini berarti len(media_files) == 1
-            print("Menemukan 1 file media. Memindahkan ke direktori utama...")
-            full_path = media_files[0]
+        # KASUS 2: HANYA 1 FILE MEDIA (Foto/Video Tunggal) -> JANGAN DI-ZIP
+        else: # (len(media_files) == 1)
+            print("Menemukan 1 file media. Memindahkan ke direktori utama (mengabaikan file .txt)...")
+            full_path = media_files[0] # Ambil satu-satunya file media
+            single_file_name = os.path.basename(full_path)
+            # Pastikan nama file aman untuk dipindahkan
+            safe_single_file_name = f"{unique_id}_{single_file_name}"
+            dst_path = os.path.join(DOWNLOAD_DIR, safe_single_file_name)
             
-            # --- PERBAIKAN NAMA FILE: Pisahkan nama server dan nama unduhan ---
-            original_basename = os.path.basename(full_path)
-            
-            # Nama file aman untuk *disimpan* di server (hindari tabrakan/karakter aneh)
-            # Ganti spasi dan karakter tidak aman
-            safe_basename = original_basename.replace(" ", "_").replace("'", "").replace('"', "")
-            safe_server_filename = f"{unique_id}_{safe_basename}"
-            
-            dst_path = os.path.join(DOWNLOAD_DIR, safe_server_filename)
             shutil.move(full_path, dst_path)
             
-            return_filename_for_link = safe_server_filename  # Ini untuk /downloads/....
-            return_filename_for_download = original_basename # Ini untuk atribut download=""
-            # --- AKHIR PERBAIKAN NAMA FILE ---
-            
+            return_filename = safe_single_file_name
             message = f"Unduhan berhasil ({tool_used})!"
-            print(f"File dipindahkan: {return_filename_for_link} (Nama asli: {return_filename_for_download})")
+            print(f"File dipindahkan: {return_filename}")
+        
+        # --- PERBAIKAN MASALAH CAROUSEL (Selesai) ---
 
-        download_link = f'/downloads/{return_filename_for_link}'
+
+        download_link = f'/downloads/{return_filename}'
         return jsonify({
             "message": message,
             "download_url": download_link,
-            "filename": return_filename_for_download # Kirim nama file asli (atau nama zip)
+            "filename": return_filename
         })
 
     except subprocess.TimeoutExpired as e:
@@ -450,34 +395,28 @@ def download_media():
         print(f"Terjadi error tak terduga: {e}")
         return jsonify({"error": "Terjadi error internal server.", "details": str(e)}), 500
     
-    # --- FIX 4: Perbaiki logika cleanup ---
     finally:
+        # Selalu bersihkan folder sementara
         if os.path.exists(output_subdir):
             try:
                 shutil.rmtree(output_subdir)
                 print(f"Membersihkan folder sementara: {output_subdir}")
             except Exception as cleanup_error:
                 print(f"Warning: Gagal membersihkan folder sementara: {cleanup_error}")
-    # --- AKHIR FIX 4 ---
+
 
 # --- Endpoint untuk Menyajikan File ---
 @app.route('/downloads/<path:filename>')
 def serve_file(filename):
-    # --- FIX 9: Cegah path traversal ---
+    # Cegah path traversal
     if '..' in filename or filename.startswith('/'):
         return jsonify({"error": "Invalid filename"}), 400
-    # --- AKHIR FIX 9 ---
     
-    # Frontend akan menggunakan atribut 'download' untuk nama file yang dilihat pengguna,
-    # 'filename' di sini adalah nama aman di server.
     return send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True)
-# --- AKHIR FIX 9 (Fungsi) ---
 
 # --- Jalankan Server ---
 if __name__ == '__main__':
-    # Jalankan fungsi untuk menulis cookie dari env saat server mulai
     write_cookies_from_env() 
-    
     port = int(os.environ.get('PORT', SERVER_PORT)) 
     
     print(f"Menjalankan server di http://0.0.0.0:{port}")
