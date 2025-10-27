@@ -313,16 +313,22 @@ def download_media():
                 media_url
             ]
             
-            # Jika ID format meminta penggabungan (dari fallback), tambahkan flag merge
-            if '+' in download_format:
-                 print("Mendeteksi format penggabungan (+), menambahkan --merge-output-format mp4")
-                 command.extend(['--merge-output-format', 'mp4'])
+            # --- PERBAIKAN ERROR 0xc00d36e6 & AUDIO ---
             
-            # Jika ID format adalah audio (dari fallback), coba konversi ke MP3
+            # KASUS A: Format HANYA AUDIO
+            # (Jika ID format adalah 'bestaudio/best' atau hanya berisi audio)
             if 'audio' in download_format.lower() and 'video' not in download_format.lower():
                 print("Mendeteksi format audio, menambahkan -x --audio-format mp3")
                 command.extend(['-x', '--audio-format', 'mp3'])
-            # --- AKHIR PEMBARUAN ---
+            
+            # KASUS B: Format VIDEO (atau Video+Audio, atau fallback merge)
+            else:
+                # --- PERBAIKAN ERROR 0xc00d36e6 ---
+                # Paksa remux ke MP4 container. Ini memperbaiki 0xc00d36e6 di Windows
+                # dengan membersihkan container file, tanpa re-encoding (cepat).
+                print("Mendeteksi format video. Memaksa remux ke MP4 untuk kompatibilitas.")
+                command.extend(['--remux-video', 'mp4'])
+                # --- AKHIR PERBAIKAN ---
             
             if "twitter.com" in media_url or "x.com" in media_url:
                 if os.path.exists(TWITTER_COOKIES):
