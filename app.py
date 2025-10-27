@@ -288,10 +288,16 @@ def download_media():
         print(f"Total file valid ditemukan (rekursif, >0 byte): {len(all_files)}")
         # --- AKHIR FIX 8 ---
 
-        if not all_files:
-            # Jika tidak ada file, cek return code
+        # --- PERBAIKAN MASALAH ZIP: Filter untuk file media saja ---
+        MEDIA_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.mov', '.avi', '.mkv', '.webm')
+        media_files = [f for f in all_files if f.lower().endswith(MEDIA_EXTENSIONS)]
+        print(f"Ditemukan {len(media_files)} file media dari total {len(all_files)} file.")
+        # --- AKHIR PERBAIKAN ---
+
+        if not media_files: # Periksa media_files, bukan all_files
+            # Jika tidak ada file MEDIA, cek return code
             if result.returncode != 0:
-                print(f"subprocess gagal DAN tidak ada file yang ditemukan.")
+                print(f"subprocess gagal DAN tidak ada file media yang ditemukan.")
                 error_detail = result.stderr
                 if "login required" in error_detail or "HTTP redirect to login page" in error_detail:
                     error_message = f"Gagal: {tool_used} memerlukan login (cookie mungkin kedaluwarsa)."
@@ -301,28 +307,29 @@ def download_media():
                     error_message = f"Gagal menjalankan {tool_used}."
                 return jsonify({"error": error_message, "details": error_detail}), 500
             else:
-                 # Sukses tapi 0 file (kasus aneh)
-                raise Exception("Proses unduhan selesai tanpa error, tetapi tidak ada file yang ditemukan.")
+                 # Sukses tapi 0 file media (kasus aneh)
+                raise Exception("Proses unduhan selesai tanpa error, tetapi tidak ada file media yang ditemukan.")
         
-        # --- PERBAIKAN BUG CAROUSEL ---
-        # Hapus 'or tool_used == "gallery-dl"' agar foto tunggal tidak di-zip
-        elif len(all_files) > 1:
+        # --- PERBAIKAN MASALAH ZIP: Gunakan hitungan media_files untuk logika ZIP ---
+        elif len(media_files) > 1:
         # --- AKHIR PERBAIKAN ---
-            print(f"Menemukan {len(all_files)} file. Membuat file .zip...")
+            print(f"Menemukan {len(media_files)} file media (total {len(all_files)} file). Membuat file .zip...")
             # --- FIX 10: Tambahkan timestamp ke zip ---
             zip_filename_no_ext = f"{unique_id}_gallery_{int(time.time())}"
             # --- AKHIR FIX 10 ---
             zip_base_path = os.path.join(DOWNLOAD_DIR, zip_filename_no_ext)
             
+            # Kita tetap men-zip seluruh output_subdir untuk menyertakan file non-media (seperti caption)
             shutil.make_archive(zip_base_path, 'zip', output_subdir)
             
             return_filename = f"{zip_filename_no_ext}.zip"
-            message = f"Unduhan carousel/galeri berhasil ({len(all_files)} file di-zip)!"
+            message = f"Unduhan carousel/galeri berhasil ({len(media_files)} file media di-zip)!" # Perbarui pesan
             print(f"File Zip dibuat: {return_filename}")
 
-        else:
-            print("Menemukan 1 file. Memindahkan ke direktori utama...")
-            full_path = all_files[0]
+        else: # Ini berarti len(media_files) == 1
+            print("Menemukan 1 file media. Memindahkan ke direktori utama...")
+            # Ambil path file media tunggal
+            full_path = media_files[0] 
             single_file_name = os.path.basename(full_path)
             # Pastikan nama file aman untuk dipindahkan
             safe_single_file_name = f"{unique_id}_{single_file_name}"
