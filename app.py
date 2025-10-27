@@ -7,7 +7,8 @@ import uuid
 import shutil
 import base64
 import time 
-import sys # <-- PERBAIKAN: Tambahkan import sys
+import sys
+import traceback # <-- PERBAIKAN: Tambahkan import traceback
 
 # --- Konfigurasi ---
 DOWNLOAD_DIR = "downloaded_videos"
@@ -53,7 +54,6 @@ ALLOWED_FRONTEND_ORIGINS = [
     "https.mediadown.kesug.com",      # Domain utama
     "https://www.mediadown.kesug.com" # Jika pengguna mengakses via www
 ]
-
 CORS(app, resources={
     r"/api/*": {
         "origins": ALLOWED_FRONTEND_ORIGINS,
@@ -159,201 +159,230 @@ def get_video_formats(media_url):
 # --- ENDPOINT (Langkah 1) ---
 @app.route('/api/get_formats', methods=['POST'])
 def api_get_formats():
-    data = request.get_json()
-    media_url = data.get('url')
-    if not media_url:
-        return jsonify({"error": "URL tidak diberikan"}), 400
+    # --- PERBAIKAN: Tambahkan try...except di seluruh endpoint ---
+    try:
+        data = request.get_json()
+        
+        if not data:
+            print("ERROR: Menerima request tanpa data JSON (body kosong?).")
+            return jsonify({"error": "Request body (JSON) kosong."}), 400
 
-    # Lewati pilihan format untuk IG/TikTok/Pinterest
-    if "instagram.com" in media_url or "tiktok.com" in media_url or "pinterest.com" in media_url:
-        return jsonify({
-            "status": "skip_format_selection",
-            "message": "Platform ini langsung mengunduh tanpa pilihan format"
-        })
+        media_url = data.get('url')
+        if not media_url:
+            return jsonify({"error": "URL tidak diberikan"}), 400
 
-    result = get_video_formats(media_url)
-    
-    if result["status"] == "error":
-        return jsonify({"error": result["message"], "details": result.get("details", "")}), 500
-    
-    return jsonify(result)
+        # Lewati pilihan format untuk IG/TikTok/Pinterest
+        if "instagram.com" in media_url or "tiktok.com" in media_url or "pinterest.com" in media_url:
+            return jsonify({
+                "status": "skip_format_selection",
+                "message": "Platform ini langsung mengunduh tanpa pilihan format"
+            })
+
+        result = get_video_formats(media_url)
+        
+        if result["status"] == "error":
+            return jsonify({"error": result["message"], "details": result.get("details", "")}), 500
+        
+        return jsonify(result)
+
+    except Exception as e:
+        # Ini akan menangkap error seperti 'NoneType' object has no attribute 'get'
+        print(f"FATAL ERROR di endpoint /api/get_formats: {e}")
+        print(traceback.format_exc()) # Cetak error lengkap ke log
+        return jsonify({"error": "Terjadi error fatal di server.", "details": str(e)}), 500
+    # --- AKHIR PERBAIKAN ---
 
 
 # --- ENDPOINT (Langkah 2 / Alur Unduh) ---
 @app.route('/api/download', methods=['POST'])
 def download_media():
-    data = request.get_json()
-    media_url = data.get('url')
-    download_format = data.get('format') 
-
-    if not media_url or not download_format:
-        return jsonify({"error": "URL atau format tidak diberikan"}), 400
-
-    print(f"Menerima permintaan unduh untuk: {media_url} (Format: {download_format})")
-
-    unique_id = str(uuid.uuid4())
-    output_subdir = os.path.join(DOWNLOAD_DIR, unique_id)
-    os.makedirs(output_subdir)
-    
-    return_filename = ""
-    tool_used = ""
-    result = None 
-    
+    # --- PERBAIKAN: Tambahkan try...except di seluruh endpoint ---
     try:
-        command = []
+        data = request.get_json()
         
-        # --- KASUS 1: GALERI (Instagram, Pinterest, TikTok) ---
-        if download_format == "gallery_dl_zip":
-            print("Menggunakan gallery-dl (alur Zip)...")
-            tool_used = "gallery-dl"
-            command = [
-                sys.executable, '-m', 'gallery_dl', # <-- PERBAIKAN: Gunakan sys.executable
-                '--no-check-certificate',
-                '--sleep', '2-4', 
-                '--user-agent', USER_AGENT
-            ]
+        if not data:
+            print("ERROR: Menerima request /api/download tanpa data JSON (body kosong?).")
+            return jsonify({"error": "Request body (JSON) kosong."}), 400
             
-            if "instagram.com" in media_url and os.path.exists(INSTAGRAM_COOKIES):
-                command.extend(['--cookies', INSTAGRAM_COOKIES])
-            if "tiktok.com" in media_url and os.path.exists(TIKTOK_COOKIES):
-                command.extend(['--cookies', TIKTOK_COOKIES])
+        media_url = data.get('url')
+        download_format = data.get('format') 
 
-            command.extend(['-d', output_subdir, media_url])
+        if not media_url or not download_format:
+            return jsonify({"error": "URL atau format tidak diberikan"}), 400
+
+        print(f"Menerima permintaan unduh untuk: {media_url} (Format: {download_format})")
+
+        unique_id = str(uuid.uuid4())
+        output_subdir = os.path.join(DOWNLOAD_DIR, unique_id)
+        os.makedirs(output_subdir)
         
-        # --- KASUS 2: VIDEO (YouTube, Twitter) ---
-        else:
-            print(f"Menggunakan yt-dlp (format ID: {download_format})...")
-            tool_used = "yt-dlp"
-            # Template nama file yang lebih bersih
-            output_template = os.path.join(output_subdir, '%(title)s - %(id)s.%(ext)s')
+        return_filename = ""
+        tool_used = ""
+        result = None 
+        
+        # try...except internal Anda sudah ada, jadi kita biarkan
+        try:
+            command = []
             
-            command = [
-                sys.executable, '-m', 'yt_dlp', # <-- PERBAIKAN: Gunakan sys.executable
-                '--no-check-certificate',
-                '--geo-bypass',
-                '--no-playlist',
-                '--user-agent', USER_AGENT,
-                '-f', download_format,
-                '-o', output_template,
-                media_url
-            ]
+            # --- KASUS 1: GALERI (Instagram, Pinterest, TikTok) ---
+            if download_format == "gallery_dl_zip":
+                print("Menggunakan gallery-dl (alur Zip)...")
+                tool_used = "gallery-dl"
+                command = [
+                    sys.executable, '-m', 'gallery_dl', # <-- PERBAIKAN: Gunakan sys.executable
+                    '--no-check-certificate',
+                    '--sleep', '2-4', 
+                    '--user-agent', USER_AGENT
+                ]
+                
+                if "instagram.com" in media_url and os.path.exists(INSTAGRAM_COOKIES):
+                    command.extend(['--cookies', INSTAGRAM_COOKIES])
+                if "tiktok.com" in media_url and os.path.exists(TIKTOK_COOKIES):
+                    command.extend(['--cookies', TIKTOK_COOKIES])
+
+                command.extend(['-d', output_subdir, media_url])
             
-            if "twitter.com" in media_url or "x.com" in media_url:
-                if os.path.exists(TWITTER_COOKIES):
-                    command.extend(['--cookies', TWITTER_COOKIES])
-            
-            if "youtube.com" in media_url or "youtu.be" in media_url:
-                if os.path.exists(YOUTUBE_COOKIES):
-                    command.extend(['--cookies', YOUTUBE_COOKIES])
-            
-            # --- PERBAIKAN: Logika Audio vs Video yang Jelas ---
-            if 'audio' in download_format.lower() or download_format == 'bestaudio/best':
-                print("Mode: Audio Saja. Mengonversi ke MP3...")
-                command.extend(['-x', '--audio-format', 'mp3'])
+            # --- KASUS 2: VIDEO (YouTube, Twitter) ---
             else:
-                print(f"Mode: Video. Memastikan container MP4 (Merge + Remux) untuk kompatibilitas...")
-                command.extend(['--merge-output-format', 'mp4']) 
-                command.extend(['--remux-video', 'mp4'])
-
-        
-        # --- Jalankan Perintah ---
-        print(f"Akan menjalankan perintah: {' '.join(command)}")
-        print(f"Proses unduhan dimulai (batas waktu: {DOWNLOAD_TIMEOUT} detik)...")
-        
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False, 
-            encoding='utf-8',
-            errors='replace', 
-            timeout=DOWNLOAD_TIMEOUT
-        )
-        
-        print("...Proses unduhan selesai.")
-        print(f"[{tool_used}] stdout:", result.stdout)
-        print(f"[{tool_used}] stderr:", result.stderr)
-        
-        # --- Logika Pemrosesan Hasil (Zipping & Pencarian Rekursif) ---
-        print(f"Memeriksa hasil di: {output_subdir}")
-        
-        all_files = []
-        for root, dirs, files in os.walk(output_subdir):
-            for file in files:
-                if file.endswith('.part'): continue
-                full_path = os.path.join(root, file)
-                all_files.append(full_path)
-        
-        all_files = [f for f in all_files if os.path.getsize(f) > 0]
-        print(f"Total file valid ditemukan (rekursif, >0 byte): {len(all_files)}")
-
-        # --- PERBAIKAN LOGIKA CAROUSEL ---
-        media_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.mkv', '.webm', '.mov']
-        media_files = [
-            f for f in all_files 
-            if os.path.splitext(f)[1].lower() in media_extensions
-        ]
-        print(f"Ditemukan {len(media_files)} file media.")
-
-        if not media_files:
-            if result.returncode != 0:
-                print(f"subprocess gagal DAN tidak ada file media yang ditemukan.")
-                error_detail = result.stderr
-                if "login required" in error_detail or "HTTP redirect to login page" in error_detail:
-                    error_message = f"Gagal: {tool_used} memerlukan login (cookie mungkin kedaluwarsa)."
-                elif "No video formats found" in error_detail:
-                     error_message = "Gagal: Postingan ini (mungkin foto) tidak dapat diunduh."
+                print(f"Menggunakan yt-dlp (format ID: {download_format})...")
+                tool_used = "yt-dlp"
+                # Template nama file yang lebih bersih
+                output_template = os.path.join(output_subdir, '%(title)s - %(id)s.%(ext)s')
+                
+                command = [
+                    sys.executable, '-m', 'yt_dlp', # <-- PERBAIKAN: Gunakan sys.executable
+                    '--no-check-certificate',
+                    '--geo-bypass',
+                    '--no-playlist',
+                    '--user-agent', USER_AGENT,
+                    '-f', download_format,
+                    '-o', output_template,
+                    media_url
+                ]
+                
+                if "twitter.com" in media_url or "x.com" in media_url:
+                    if os.path.exists(TWITTER_COOKIES):
+                        command.extend(['--cookies', TWITTER_COOKIES])
+                
+                if "youtube.com" in media_url or "youtu.be" in media_url:
+                    if os.path.exists(YOUTUBE_COOKIES):
+                        command.extend(['--cookies', YOUTUBE_COOKIES])
+                
+                # --- PERBAIKAN: Logika Audio vs Video yang Jelas ---
+                if 'audio' in download_format.lower() or download_format == 'bestaudio/best':
+                    print("Mode: Audio Saja. Mengonversi ke MP3...")
+                    command.extend(['-x', '--audio-format', 'mp3'])
                 else:
-                    error_message = f"Gagal menjalankan {tool_used}."
-                return jsonify({"error": error_message, "details": error_detail}), 500
+                    print(f"Mode: Video. Memastikan container MP4 (Merge + Remux) untuk kompatibilitas...")
+                    command.extend(['--merge-output-format', 'mp4']) 
+                    command.extend(['--remux-video', 'mp4'])
+
+            
+            # --- Jalankan Perintah ---
+            print(f"Akan menjalankan perintah: {' '.join(command)}")
+            print(f"Proses unduhan dimulai (batas waktu: {DOWNLOAD_TIMEOUT} detik)...")
+            
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False, 
+                encoding='utf-8',
+                errors='replace', 
+                timeout=DOWNLOAD_TIMEOUT
+            )
+            
+            print("...Proses unduhan selesai.")
+            print(f"[{tool_used}] stdout:", result.stdout)
+            print(f"[{tool_used}] stderr:", result.stderr)
+            
+            # --- Logika Pemrosesan Hasil (Zipping & Pencarian Rekursif) ---
+            print(f"Memeriksa hasil di: {output_subdir}")
+            
+            all_files = []
+            for root, dirs, files in os.walk(output_subdir):
+                for file in files:
+                    if file.endswith('.part'): continue
+                    full_path = os.path.join(root, file)
+                    all_files.append(full_path)
+            
+            all_files = [f for f in all_files if os.path.getsize(f) > 0]
+            print(f"Total file valid ditemukan (rekursif, >0 byte): {len(all_files)}")
+
+            # --- PERBAIKAN LOGIKA CAROUSEL ---
+            media_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.mkv', '.webm', '.mov']
+            media_files = [
+                f for f in all_files 
+                if os.path.splitext(f)[1].lower() in media_extensions
+            ]
+            print(f"Ditemukan {len(media_files)} file media.")
+
+            if not media_files:
+                if result.returncode != 0:
+                    print(f"subprocess gagal DAN tidak ada file media yang ditemukan.")
+                    error_detail = result.stderr
+                    if "login required" in error_detail or "HTTP redirect to login page" in error_detail:
+                        error_message = f"Gagal: {tool_used} memerlukan login (cookie mungkin kedaluwarsa)."
+                    elif "No video formats found" in error_detail:
+                         error_message = "Gagal: Postingan ini (mungkin foto) tidak dapat diunduh."
+                    else:
+                        error_message = f"Gagal menjalankan {tool_used}."
+                    return jsonify({"error": error_message, "details": error_detail}), 500
+                else:
+                    raise Exception("Proses unduhan selesai tanpa error, tetapi tidak ada file media yang ditemukan.")
+            
+            elif len(media_files) > 1:
+                print(f"Menemukan {len(media_files)} file media. Membuat file .zip...")
+                zip_filename_no_ext = f"{unique_id}_gallery_{int(time.time())}"
+                zip_base_path = os.path.join(DOWNLOAD_DIR, zip_filename_no_ext)
+                
+                shutil.make_archive(zip_base_path, 'zip', output_subdir)
+                
+                return_filename = f"{zip_filename_no_ext}.zip"
+                message = f"Unduhan carousel/galeri berhasil ({len(media_files)} media di-zip)!"
+                print(f"File Zip dibuat: {return_filename}")
+
             else:
-                raise Exception("Proses unduhan selesai tanpa error, tetapi tidak ada file media yang ditemukan.")
+                print("Menemukan 1 file media. Memindahkan ke direktori utama...")
+                full_path = media_files[0]
+                single_file_name = os.path.basename(full_path)
+                
+                safe_single_file_name = f"{unique_id}_{single_file_name}"
+                dst_path = os.path.join(DOWNLOAD_DIR, safe_single_file_name)
+                shutil.move(full_path, dst_path)
+                
+                return_filename = safe_single_file_name
+                message = f"Unduhan berhasil ({tool_used})!"
+                print(f"File dipindahkan: {return_filename}")
+
+            download_link = f'/downloads/{return_filename}'
+            return jsonify({
+                "message": message,
+                "download_url": download_link,
+                "filename": return_filename
+            })
+
+        except subprocess.TimeoutExpired as e:
+            print(f"Error: Proses unduhan melebihi batas waktu ({DOWNLOAD_TIMEOUT} detik).")
+            return jsonify({"error": f"Proses unduhan terlalu lama (melebihi {DOWNLOAD_TIMEOUT} detik) dan dihentikan."}), 500
+        except Exception as e:
+            print(f"Terjadi error tak terduga: {e}")
+            return jsonify({"error": "Terjadi error internal server.", "details": str(e)}), 500
         
-        elif len(media_files) > 1:
-            print(f"Menemukan {len(media_files)} file media. Membuat file .zip...")
-            zip_filename_no_ext = f"{unique_id}_gallery_{int(time.time())}"
-            zip_base_path = os.path.join(DOWNLOAD_DIR, zip_filename_no_ext)
-            
-            shutil.make_archive(zip_base_path, 'zip', output_subdir)
-            
-            return_filename = f"{zip_filename_no_ext}.zip"
-            message = f"Unduhan carousel/galeri berhasil ({len(media_files)} media di-zip)!"
-            print(f"File Zip dibuat: {return_filename}")
+        finally:
+            if os.path.exists(output_subdir):
+                try:
+                    shutil.rmtree(output_subdir)
+                    print(f"Membersihkan folder sementara: {output_subdir}")
+                except Exception as cleanup_error:
+                    print(f"Warning: Gagal membersihkan folder sementara: {cleanup_error}")
 
-        else:
-            print("Menemukan 1 file media. Memindahkan ke direktori utama...")
-            full_path = media_files[0]
-            single_file_name = os.path.basename(full_path)
-            
-            safe_single_file_name = f"{unique_id}_{single_file_name}"
-            dst_path = os.path.join(DOWNLOAD_DIR, safe_single_file_name)
-            shutil.move(full_path, dst_path)
-            
-            return_filename = safe_single_file_name
-            message = f"Unduhan berhasil ({tool_used})!"
-            print(f"File dipindahkan: {return_filename}")
-
-        download_link = f'/downloads/{return_filename}'
-        return jsonify({
-            "message": message,
-            "download_url": download_link,
-            "filename": return_filename
-        })
-
-    except subprocess.TimeoutExpired as e:
-        print(f"Error: Proses unduhan melebihi batas waktu ({DOWNLOAD_TIMEOUT} detik).")
-        return jsonify({"error": f"Proses unduhan terlalu lama (melebihi {DOWNLOAD_TIMEOUT} detik) dan dihentikan."}), 500
     except Exception as e:
-        print(f"Terjadi error tak terduga: {e}")
-        return jsonify({"error": "Terjadi error internal server.", "details": str(e)}), 500
-    
-    finally:
-        if os.path.exists(output_subdir):
-            try:
-                shutil.rmtree(output_subdir)
-                print(f"Membersihkan folder sementara: {output_subdir}")
-            except Exception as cleanup_error:
-                print(f"Warning: Gagal membersihkan folder sementara: {cleanup_error}")
+        # Ini akan menangkap error seperti 'NoneType' object has no attribute 'get'
+        print(f"FATAL ERROR di endpoint /api/download: {e}")
+        print(traceback.format_exc()) # Cetak error lengkap ke log
+        return jsonify({"error": "Terjadi error fatal di server.", "details": str(e)}), 500
+    # --- AKHIR PERBAIKAN ---
 
 
 # --- Endpoint untuk Menyajikan File ---
