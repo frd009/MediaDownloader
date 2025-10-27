@@ -133,56 +133,42 @@ def get_video_formats(media_url):
                 
             data = json.loads(line)
             final_title = data.get('title', final_title)
-            formats = data.get('formats', [])
+            
+            # --- PERBAIKAN: Sederhanakan pilihan format untuk YouTube/Twitter ---
+            # Hapus pencarian format yang rumit
+            # Cukup tawarkan opsi standar yang dipahami yt-dlp
+            
+            parsed_formats = [
+                {
+                    # Perintah ini akan mencoba 1080p (mp4) + audio terbaik (m4a), 
+                    # jika gagal, akan turun ke 720p (mp4) yang sudah digabung
+                    "id": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]",
+                    "text": "Video Kualitas Terbaik (Hingga 1080p, MP4)"
+                },
+                {
+                    # Opsi fallback jika 1080p gagal
+                    "id": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]",
+                    "text": "Video Kompatibel (Hingga 720p, MP4)"
+                },
+                {
+                    # Perintah ini akan mengunduh audio terbaik dan mengonversinya
+                    "id": "bestaudio/best",
+                    "text": "Audio Saja (Unduh terbaik, konversi ke MP3)"
+                }
+            ]
+            
+            # Hentikan loop setelah data pertama (untuk YT/Twitter)
+            break 
+            # --- AKHIR PERBAIKAN ---
 
-            for f in formats:
-                format_id = f.get('format_id')
-                ext = f.get('ext')
-                height = f.get('height')
-                format_note = f.get('format_note')
-                
-                if not format_note:
-                    if height:
-                        format_note = f"{height}p"
-                    else:
-                        format_note = "Audio"
-
-                abr = f.get('abr')
-                audio_note = f" ({abr}k)" if abr else ""
-                
-                # --- PERBAIKAN: HANYA cari format yang SUDAH digabung (video+audio) ---
-                # Kita batasi di 720p, karena 1080p ke atas hampir tidak ada yang pre-merged
-                if (f.get('vcodec') != 'none' and f.get('acodec') != 'none' and height and height <= 720):
-                    parsed_formats.append({
-                        "id": format_id,
-                        # Ubah teksnya agar lebih jelas
-                        "text": f"Video {format_note} ({ext}){audio_note} [Telah Digabung]"
-                    })
-                
-                # --- HAPUS BLOK INI ---
-                # Kita tidak lagi menawarkan format terpisah yang perlu digabung,
-                # karena inilah yang menyebabkan file tidak bisa di-play.
-                # elif (f.get('vcodec') != 'none' and f.get('acodec') == 'none' and height and height <= 1080):
-                #      parsed_formats.append({
-                #         "id": f"{format_id}+bestaudio", 
-                #         "text": f"Video {format_note} ({ext}) + Audio Terbaik [Gabung]"
-                #     })
-                # --- AKHIR BLOK PENGHAPUSAN ---
-                
-                elif (f.get('vcodec') == 'none' and f.get('acodec') != 'none' and ext in ['m4a', 'mp3', 'opus']):
-                     parsed_formats.append({
-                        "id": format_id,
-                        "text": f"Audio Saja {format_note} ({ext}){audio_note}"
-                    })
-
-        unique_formats = list({f['text']: f for f in parsed_formats}.values())
+        # unique_formats = list({f['text']: f for f in parsed_formats}.values()) # Diganti oleh 'parsed_formats' di atas
         
-        if not unique_formats:
+        if not parsed_formats:
              print("Tidak ada format video/audio yang ditemukan.")
              return {"status": "success", "title": final_title, "formats": [{"id": "best", "text": "Unduh Kualitas Terbaik (Jika ada)"}]}
         
-        print(f"Menemukan {len(unique_formats)} format yang relevan.")
-        return {"status": "success", "title": final_title, "formats": unique_formats}
+        print(f"Menemukan {len(parsed_formats)} format yang relevan.")
+        return {"status": "success", "title": final_title, "formats": parsed_formats}
 
     except subprocess.CalledProcessError as e:
         print(f"Error mengambil format: {e}")
@@ -283,9 +269,9 @@ def download_media():
                 '--no-playlist',
                 '--user-agent', USER_AGENT,
                 '-f', download_format,
-                # --- HAPUS BARIS INI ---
-                # Karena kita tidak lagi menggabungkan, baris ini tidak diperlukan
-                # '--merge-output-format', 'mp4', 
+                # --- PERBAIKAN: TAMBAHKAN KEMBALI MERGE FLAG ---
+                # Ini penting untuk menggabungkan video 1080p + audio
+                '--merge-output-format', 'mp4', 
                 '-o', output_template,
                 media_url
             ]
