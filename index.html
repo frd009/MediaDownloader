@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pengunduh Media</title>
     <!-- Memuat Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -25,149 +25,161 @@
         }
     </style>
 </head>
-<!-- Latar belakang gradien halaman penuh -->
-<body class="bg-gradient-to-br from-gray-900 to-indigo-900 min-h-screen flex items-center justify-center font-sans text-gray-200 p-4">
+<body class="relative bg-gradient-to-br from-gray-900 to-indigo-900 min-h-screen flex flex-col items-center justify-center font-sans text-gray-200 overflow-x-hidden p-4">
 
-    <!-- Kontainer utama (tanpa card) -->
-    <div class="relative max-w-lg w-full p-8 m-4">
-        
-        <!-- Judul dan Ikon -->
-        <div class="flex flex-col items-center mb-6">
-            <svg class="w-16 h-16 text-indigo-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9.75v6.75m0 0l-3-3m3 3l3-3m-8.25 6a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
-            </svg>
-            <h1 class="text-3xl font-bold text-center text-white mb-1">
-                Media Downloader
-            </h1>
-            <p class="text-center text-gray-400">
-                Tempelkan link dari YouTube, X (Twitter), Instagram, TikTok dll.
-            </p>
-        </div>
-
-        <!-- Form Input -->
-        <div class="space-y-4">
-            <div>
-                <label for="url-input" class="sr-only">URL Media</label>
-                <input type="text" 
-                       id="url-input"
-                       placeholder="https://..."
-                       class="w-full px-4 py-3 bg-gray-700 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200">
-            </div>
-
-            <!-- Tombol Proses Awal -->
-            <button id="process-btn" 
-                    class="w-full flex items-center justify-center bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 transition duration-200 shadow-lg mt-4">
-                <svg class="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                </svg>
-                Proses Link
-            </button>
-        </div>
-
-        <!-- Area Hasil (Spinner, Error, Pilihan Format, Tombol Unduh) -->
-        <div id="result-container" class="mt-6 text-center min-h-[40px]">
-            
-            <!-- Loader (Spinner) -->
-            <div id="loader" class="w-10 h-10 border-4 border-gray-700 rounded-full inline-block mx-auto hidden" style="border-top-color: #6366f1;"></div>
-
-            <!-- Pesan Error -->
-            <div id="error-message" class="hidden text-red-400 bg-red-900 bg-opacity-30 border border-red-700 p-4 rounded-lg fade-in space-y-3">
-                <span id="error-text" class="block"></span>
-                <!-- Tombol Reset Jelas (Error) -->
-                <button id="reset-btn-error" class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-all duration-200">
-                    Coba Lagi
-                </button>
-            </div>
-            
-            <!-- Area Pilihan Format (tersembunyi) -->
-            <div id="format-selection-area" class="hidden space-y-4 fade-in">
-                <p id="video-title" class="text-lg font-semibold text-white"></p>
-                
-                <div>
-                    <label for="format-select" class="block text-sm font-medium text-gray-400 mb-2">Pilih format yang terdeteksi:</label>
-                    <select id="format-select" class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        <!-- Pilihan format akan diisi oleh JavaScript -->
-                    </select>
-                </div>
-                
-                <button id="download-btn" 
-                        class="w-full flex items-center justify-center bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-200 shadow-lg">
-                    <svg class="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                    </svg>
-                    Unduh Pilihan
-                </button>
-                
-                <!-- Tombol Reset Jelas (Format) -->
-                <button id="reset-btn-formats" class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-all duration-200">
-                    Mulai Lagi
-                </button>
-            </div>
-
-
-            <!-- Tombol Unduh Hasil (Untuk galeri/zip) -->
-            <div id="download-result" class="hidden fade-in space-y-3">
-                <p id="success-message" class="text-green-400 font-medium"></p>
-                <a id="download-link"
-                   href="#"
-                   download
-                   class="inline-block w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-200 shadow-md">
-                   Klik untuk Mengunduh File
-                </a>
-                <!-- Tombol Reset Jelas (Hasil) -->
-                <button id="reset-btn-result" class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-all duration-200">
-                    Unduh Lainnya
-                </button>
-            </div>
-
-        </div>
-
-        <!-- Bagian "Mengikuti Fungsi Backend" -->
-        <div class="mt-8 pt-6 border-t border-gray-700">
-            <p class="text-center text-gray-500 text-sm mb-4">
-                <span class="font-bold text-gray-400">Info:</span> Postingan carousel/galeri (IG/TikTok) akan diunduh sebagai file <span class="font-bold text-gray-400">.zip</span>.
-            </p> <!-- Tag </section> yang salah telah dihapus -->
-            <div class="flex justify-center space-x-6 opacity-60 mt-4">
-                <!-- Ikon-ikon -->
-                <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"></path></svg>
-                <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.07 1.646.07 4.85s-.012 3.584-.07 4.85c-.148 3.227-1.667 4.773-4.919 4.919-1.266.058-1.646.07-4.85.07s-3.584-.012-4.85-.07c-3.25-.146-4.771-1.693-4.919-4.919-.058-1.265-.07-1.646-.07-4.85s.012-3.584.07-4.85c.148-3.227 1.669-4.771 4.919-4.919.058-1.266.07-1.646.07-4.85zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948s.014 3.667.072 4.947c.2 4.359 2.618 6.78 6.98 6.98 1.281.059 1.689.073 4.948.073s3.667-.014 4.947-.072c4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.947s-.014-3.667-.072-4.947c-.197-4.359-2.62-6.78-6.979-6.98-1.28-.059-1.688-.073-4.947-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.162 6.162 6.162 6.162-2.759 6.162-6.162-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.791-4-4s1.791-4 4-4 4 1.791 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.441 1.441 1.441c.795 0 1.44-.645 1.44-1.441s-.645-1.44-1.44-1.44z"></path></svg>
-                <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><path d="M448 209.91a210.06 210.06 0 0 1-122.77-39.25V349.38A162.55 162.55 0 1 1 185 188.31V278.2a74.62 74.62 0 1 0 52.23 71.18V0h88a121.18 121.18 0 0 0 1.86 22.17A122.18 122.18 0 0 0 381 102.39a121.43 121.43 0 0 0 67 20.14Z"></path></svg>
-                <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg>
-            </div>
-        </div>
+    <!-- 
+      PERBAIKAN: 'absolute' diubah menjadi 'fixed' 
+      Ini akan "mengunci" efek glow ke viewport, sehingga tidak ikut ter-scroll
+      bersama konten di perangkat seluler.
+    -->
+    <div class="fixed left-0 top-0 -z-10 h-full w-full">
+        <div class="absolute -top-1/4 left-1/4 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-700 opacity-20 blur-3xl"></div>
+        <div class="absolute -bottom-1/4 right-1/4 h-96 w-96 translate-x-1/2 translate-y-1/2 rounded-full bg-indigo-700 opacity-20 blur-3xl"></div>
     </div>
 
+    <!-- Kontainer utama (lebar, responsif) -->
+    <!-- 'py-16' ditambahkan untuk memberi jarak di atas/bawah saat di-scroll -->
+    <main class="w-full max-w-6xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
+        
+        <!-- Grid Tata Letak (1 kolom di mobile, 2 kolom di desktop) -->
+        <div class="grid grid-cols-1 items-center gap-12 md:grid-cols-2 lg:gap-20">
+
+            <!-- Kolom Kiri: Teks & Info -->
+            <div class="text-center md:text-left">
+                <svg class="w-20 h-20 text-indigo-400 mb-6 mx-auto md:mx-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9.75v6.75m0 0l-3-3m3 3l3-3m-8.25 6a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
+                </svg>
+                <h1 class="text-4xl font-bold text-white sm:text-5xl md:text-6xl">
+                    Media Downloader
+                </h1>
+                <p class="mt-4 text-lg text-gray-300">
+                    Tempelkan link dari platform favorit Anda untuk mengunduh video atau foto dengan mudah.
+                </p>
+                
+                <p class="mt-10 text-sm font-medium text-gray-400 uppercase tracking-wider">
+                    Platform yang Didukung:
+                </p>
+                <div class="flex justify-center md:justify-start space-x-6 opacity-80 mt-4">
+                    <!-- Ikon-ikon -->
+                    <svg class="w-8 h-8 transition-opacity hover:opacity-100" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"></path></svg>
+                    <svg class="w-8 h-8 transition-opacity hover:opacity-100" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.07 1.646.07 4.85s-.012 3.584-.07 4.85c-.148 3.227-1.667 4.773-4.919 4.919-1.266.058-1.646.07-4.85.07s-3.584-.012-4.85-.07c-3.25-.146-4.771-1.693-4.919-4.919-.058-1.265-.07-1.646-.07-4.85s.012-3.584.07-4.85c.148-3.227 1.669-4.771 4.919-4.919.058-1.266.07-1.646.07-4.85zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948s.014 3.667.072 4.947c.2 4.359 2.618 6.78 6.98 6.98 1.281.059 1.689.073 4.948.073s3.667-.014 4.947-.072c4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.947s-.014-3.667-.072-4.947c-.197-4.359-2.62-6.78-6.979-6.98-1.28-.059-1.688-.073-4.947-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.162 6.162 6.162 6.162-2.759 6.162-6.162-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.791-4-4s1.791-4 4-4 4 1.791 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.441 1.441 1.441c.795 0 1.44-.645 1.44-1.441s-.645-1.44-1.44-1.44z"></path></svg>
+                    <svg class="w-8 h-8 transition-opacity hover:opacity-100" fill="currentColor" viewBox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><path d="M448 209.91a210.06 210.06 0 0 1-122.77-39.25V349.38A162.55 162.55 0 1 1 185 188.31V278.2a74.62 74.62 0 1 0 52.23 71.18V0h88a121.18 121.18 0 0 0 1.86 22.17A122.18 122.18 0 0 0 381 102.39a121.43 121.43 0 0 0 67 20.14Z"></path></svg>
+                    <svg class="w-7 h-7 transition-opacity hover:opacity-100" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg>
+                </div>
+            </div>
+
+            <!-- Kolom Kanan: Aplikasi Pengunduh (dengan card kaca) -->
+            <div class="rounded-2xl border border-gray-700 bg-gray-900/50 p-6 sm:p-8 shadow-2xl backdrop-blur-lg">
+                
+                <!-- Form Input -->
+                <div class="space-y-5">
+                    <div>
+                        <label for="url-input" class="sr-only">URL Media</label>
+                        <input type="text" 
+                               id="url-input"
+                               placeholder="Tempelkan link Anda di sini..."
+                               class="w-full text-lg px-5 py-4 bg-gray-700 bg-opacity-70 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200">
+                    </div>
+
+                    <!-- Tombol Proses Awal (GRADIENT BARU) -->
+                    <button id="process-btn" 
+                            class="w-full flex items-center justify-center text-lg bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-4 px-5 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 transition duration-200 shadow-lg">
+                        <svg class="w-6 h-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                        </svg>
+                        Proses Link
+                    </button>
+                </div>
+
+                <!-- Area Hasil (Spinner, Error, Pilihan Format, Tombol Unduh) -->
+                <div id="result-container" class="mt-8 text-center min-h-[40px]">
+                    
+                    <!-- Loader (Spinner) -->
+                    <div id="loader" class="w-10 h-10 border-4 border-gray-700 rounded-full inline-block mx-auto hidden" style="border-top-color: #6366f1;"></div>
+
+                    <!-- Pesan Error -->
+                    <div id="error-message" class="hidden text-red-400 bg-red-900 bg-opacity-30 border border-red-700 p-4 rounded-lg fade-in space-y-3">
+                        <span id="error-text" class="block"></span>
+                        <button id="reset-btn-error" class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-all duration-200">
+                            Coba Lagi
+                        </button>
+                    </div>
+                    
+                    <!-- Area Pilihan Format (tersembunyi) -->
+                    <div id="format-selection-area" class="hidden space-y-4 fade-in">
+                        <p id="video-title" class="text-lg font-semibold text-white"></p>
+                        
+                        <div>
+                            <label for="format-select" class="block text-sm font-medium text-gray-300 mb-2">Pilih format yang tersedia (Video sudah termasuk Audio):</label>
+                            <select id="format-select" class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <!-- Pilihan format akan diisi oleh JavaScript -->
+                            </select>
+                        </div>
+                        
+                        <button id="download-btn" 
+                                class="w-full flex items-center justify-center text-lg bg-green-600 text-white font-bold py-4 px-5 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-200 shadow-lg">
+                            <svg class="w-6 h-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                            Unduh Pilihan
+                        </button>
+                        
+                        <button id="reset-btn-formats" class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-all duration-200">
+                            Mulai Lagi
+                        </button>
+                    </div>
+
+
+                    <!-- Tombol Unduh Hasil (Untuk galeri/zip) -->
+                    <div id="download-result" class="hidden fade-in space-y-3">
+                        <p id="success-message" class="text-green-400 font-medium"></p>
+                        <a id="download-link"
+                           href="#"
+                           download
+                           class="inline-block w-full text-lg bg-green-600 text-white font-bold py-4 px-5 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-200 shadow-md">
+                           Klik untuk Mengunduh File
+                        </a>
+                        <button id="reset-btn-result" class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-all duration-200">
+                            Unduh Lainnya
+                        </button>
+                    </div>
+                </div> <!-- Akhir result-container -->
+
+                <!-- Info Zip (dipindahkan ke dalam card) -->
+                <p class="text-center text-gray-500 text-sm mt-6 pt-4 border-t border-gray-700">
+                    <span class="font-bold text-gray-400">Info:</span> Postingan carousel/galeri (IG/TikTok) akan diunduh sebagai file <span class="font-bold text-gray-400">.zip</span>.
+                </p>
+
+            </div> <!-- Akhir card kaca -->
+        </div> <!-- Akhir grid -->
+    </main>
+
     <script>
-        // --- Logika JavaScript ---
+        // --- Logika JavaScript (TIDAK ADA PERUBAHAN) ---
         
         const urlInput = document.getElementById('url-input');
         const processBtn = document.getElementById('process-btn');
         const loader = document.getElementById('loader');
         
-        // --- DIPERBARUI: Referensi Tombol Reset & Error ---
         const errorMessage = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
         const resetBtnError = document.getElementById('reset-btn-error');
         const resetBtnFormats = document.getElementById('reset-btn-formats');
         const resetBtnResult = document.getElementById('reset-btn-result');
         
-        // Area Pilihan Format
         const formatSelectionArea = document.getElementById('format-selection-area');
         const videoTitle = document.getElementById('video-title');
         const formatSelect = document.getElementById('format-select');
         const downloadBtn = document.getElementById('download-btn');
 
-        // Area Unduh Langsung
         const downloadResult = document.getElementById('download-result');
         const downloadLink = document.getElementById('download-link');
         const successMessage = document.getElementById('success-message');
 
-        // --- DIPERBARUI: URL Backend Menggunakan URL Produksi ---
         const BASE_URL = 'https://web-production-11f7.up.railway.app';
         const GET_FORMATS_URL = `${BASE_URL}/api/get_formats`;
         const DOWNLOAD_URL = `${BASE_URL}/api/download`;
 
-        // Fungsi untuk menampilkan status
         function showLoading() {
             loader.classList.remove('hidden');
             errorMessage.classList.add('hidden');
@@ -184,19 +196,18 @@
             errorMessage.classList.add('hidden');
             
             successMessage.textContent = message; 
-            // --- DIPERBARUI: Menggunakan BASE_URL untuk link unduhan ---
             downloadLink.href = BASE_URL + url; 
             downloadLink.download = filename; 
             downloadLink.textContent = `Unduh: ${filename}`; 
             
             downloadResult.classList.remove('hidden');
-            processBtn.classList.add('hidden'); // Sembunyikan tombol proses
+            processBtn.classList.add('hidden'); 
         }
 
         function showFormatOptions(title, formats) {
             loader.classList.add('hidden');
             errorMessage.classList.add('hidden');
-            processBtn.classList.add('hidden'); // Sembunyikan tombol proses
+            processBtn.classList.add('hidden'); 
 
             videoTitle.textContent = title;
             formatSelect.innerHTML = ''; 
@@ -205,6 +216,13 @@
                 showError("Tidak ada format video/audio yang dapat diunduh untuk link ini.");
                 return;
             }
+
+            const defaultOption = document.createElement('option');
+            defaultOption.value = "";
+            defaultOption.textContent = "-- Pilih Resolasi --";
+            defaultOption.disabled = true;
+            defaultOption.selected = true;
+            formatSelect.appendChild(defaultOption);
 
             formats.forEach(format => {
                 const option = document.createElement('option');
@@ -221,13 +239,12 @@
             loader.classList.add('hidden');
             downloadResult.classList.add('hidden');
             
-            errorText.textContent = message; // Set teks di span
-            errorMessage.classList.remove('hidden'); // Tampilkan kontainer error
+            errorText.textContent = message; 
+            errorMessage.classList.remove('hidden'); 
             
-            processBtn.classList.add('hidden'); // Sembunyikan tombol proses
+            processBtn.classList.add('hidden'); 
         }
 
-        // --- FUNGSI RESET BARU ---
         function resetUI() {
             processBtn.disabled = false;
             processBtn.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -239,14 +256,12 @@
             errorMessage.classList.add('hidden');
             downloadResult.classList.add('hidden');
 
-            urlInput.value = ''; // Kosongkan input
-            urlInput.focus(); // Fokus kembali ke input
+            urlInput.value = ''; 
+            urlInput.focus(); 
         }
         
-        // --- Event Listener ---
         processBtn.addEventListener('click', handleProcessLink);
         downloadBtn.addEventListener('click', handleFinalDownload);
-        // --- DIPERBARUI: Listener untuk semua tombol reset ---
         resetBtnError.addEventListener('click', resetUI); 
         resetBtnFormats.addEventListener('click', resetUI);
         resetBtnResult.addEventListener('click', resetUI);
@@ -254,15 +269,13 @@
         async function handleProcessLink() {
             const url = urlInput.value.trim();
             if (!url) {
-                // Gunakan alur error kustom kita
-                showLoading(); // Tampilkan loader
-                showError('Silakan masukkan URL media terlebih dahulu.'); // Tampilkan error
+                showLoading(); 
+                showError('Silakan masukkan URL media terlebih dahulu.'); 
                 return;
             }
 
             showLoading();
 
-            // --- PERBAIKAN TIKTOK: Arahkan semua IG, Pinterest, dan TikTok ke gallery-dl ---
             if (url.includes("instagram.com") || url.includes("pinterest.com") || url.includes("tiktok.com")) {
                 console.log("Mendeteksi URL Galeri/TikTok, mengunduh langsung...");
                 await fetchAndDownload(url, "gallery_dl_zip");
@@ -281,11 +294,10 @@
 
                 if (!response.ok) {
                     let errorMsg = data.error || 'Gagal mengambil format.';
-                    // --- PERBAIKAN TWITTER: Pesan error lebih baik ---
-                    if (data.details && (data.details.includes('403') || data.details.includes('guest token') || data.details.includes('400') || data.details.includes('Unable to get guest token'))) {
-                        errorMsg = 'Gagal memproses link X/Twitter. Pastikan yt-dlp terbaru (`pip install --upgrade yt-dlp`) dan Anda memiliki file "twitter_cookies.txt" YANG VALID.';
+                    if (data.details && (data.details.includes('43') || data.details.includes('guest token') || data.details.includes('400') || data.details.includes('Unable to get guest token'))) {
+                        errorMsg = 'Gagal memproses link X/Twitter. Pastikan yt-dlp terbaru dan cookie "twitter_cookies.txt" valid.';
                     } else if (data.details && data.details.includes('No video could be found')) {
-                         errorMsg = 'Gagal: Tidak ada video yang ditemukan di tweet ini. (Pastikan yt-dlp Anda terbaru).';
+                         errorMsg = 'Gagal: Tidak ada video yang ditemukan di tweet ini.';
                     }
                     showError(errorMsg);
                 } else {
@@ -303,7 +315,7 @@
             const formatId = formatSelect.value; 
 
             if (!url || !formatId) {
-                showError('Terjadi kesalahan, URL atau Format ID hilang.');
+                showError('Silakan pilih format/resolusi terlebih dahulu.');
                 return;
             }
             
@@ -331,9 +343,8 @@
                 if (!response.ok) {
                     let errorMsg = data.error || 'Terjadi kesalahan yang tidak diketahui.';
                     if (data.details) {
-                        // --- PERBAIKAN TIKTOK: Pesan error lebih baik ---
                         if (data.details.includes('login required') || data.details.includes('login page')) {
-                            errorMsg = 'Gagal: Instagram/TikTok memerlukan login. Pastikan file "instagram_cookies.txt" / "tiktok_cookies.txt" Anda valid dan terbaru.';
+                            errorMsg = 'Gagal: Instagram/TikTok memerlukan login. Pastikan file cookie Anda valid dan terbaru.';
                         }
                     }
                     showError(errorMsg);
@@ -344,7 +355,7 @@
 
             } catch (error) {
                 console.error('Error koneksi (download):', error);
-                showError('Gagal terhubung ke server (download). Pastikan backend Anda berjalan.');
+                showError('Ggagal terhubung ke server (download). Pastikan backend Anda berjalan.');
             }
         }
     </script>
