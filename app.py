@@ -7,6 +7,7 @@ import uuid
 import shutil
 import base64
 import time 
+import sys # <-- PERBAIKAN: Tambahkan import sys
 
 # --- Konfigurasi ---
 DOWNLOAD_DIR = "downloaded_videos"
@@ -47,8 +48,7 @@ def write_cookies_from_env():
 
 app = Flask(__name__)
 
-# --- PERBAIKAN CORS ---
-# Izinkan domain 'www' dan domain 'polos' (tanpa www) secara eksplisit.
+# --- Konfigurasi CORS (Sudah Benar) ---
 ALLOWED_FRONTEND_ORIGINS = [
     "https.mediadown.kesug.com",      # Domain utama
     "https://www.mediadown.kesug.com" # Jika pengguna mengakses via www
@@ -66,7 +66,6 @@ CORS(app, resources={
         "allow_headers": ["Content-Type"]
     }
 })
-# --- AKHIR PERBAIKAN CORS ---
 
 
 if not os.path.exists(DOWNLOAD_DIR):
@@ -77,7 +76,7 @@ def get_video_formats(media_url):
     print(f"Mengambil format untuk: {media_url}")
     
     command = [
-        'python', '-m', 'yt_dlp',
+        sys.executable, '-m', 'yt_dlp', # <-- PERBAIKAN: Gunakan sys.executable
         '-j', 
         '--no-check-certificate',
         '--geo-bypass',
@@ -116,36 +115,28 @@ def get_video_formats(media_url):
             break # Hanya perlu baris pertama untuk judul
         
         # --- PERBAIKAN: Tawarkan Pilihan Resolusi Cerdas ---
-        # Daripada mem-parsing format, kita tawarkan "pilihan cerdas"
-        # yt-dlp akan otomatis memilih yang terbaik sesuai batasan ini.
         parsed_formats = [
             {
-                # Opsi 4K/Terbaik: Unduh video terbaik (hingga 2160p) + audio terbaik, gabungkan.
                 "id": "bestvideo[height<=2160]+bestaudio/best[height<=2160]",
                 "text": "Video Kualitas Terbaik (Hingga 4K)"
             },
             {
-                # Opsi 1080p: Unduh video terbaik (hingga 1080p) + audio terbaik, gabungkan.
                 "id": "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
                 "text": "Video Kualitas Tinggi (Hingga 1080p)"
             },
             {
-                # Opsi 720p: Pilihan aman, biasanya sudah ter-merge.
                 "id": "bestvideo[height<=720]+bestaudio/best[height<=720]",
                 "text": "Video Kualitas Standar (Hingga 720p)"
             },
             {
-                 # Opsi 480p: Untuk hemat data.
                 "id": "bestvideo[height<=480]+bestaudio/best[height<=480]",
                 "text": "Video Kualitas Rendah (Hingga 480p)"
             },
             {
-                # Opsi Audio Saja
                 "id": "bestaudio/best",
                 "text": "Audio Saja (Format MP3)"
             }
         ]
-        # --- AKHIR PERBAIKAN ---
         
         print(f"Menawarkan {len(parsed_formats)} pilihan format cerdas.")
         return {"status": "success", "title": final_title, "formats": parsed_formats}
@@ -216,7 +207,7 @@ def download_media():
             print("Menggunakan gallery-dl (alur Zip)...")
             tool_used = "gallery-dl"
             command = [
-                'python', '-m', 'gallery_dl',
+                sys.executable, '-m', 'gallery_dl', # <-- PERBAIKAN: Gunakan sys.executable
                 '--no-check-certificate',
                 '--sleep', '2-4', 
                 '--user-agent', USER_AGENT
@@ -237,7 +228,7 @@ def download_media():
             output_template = os.path.join(output_subdir, '%(title)s - %(id)s.%(ext)s')
             
             command = [
-                'python', '-m', 'yt_dlp',
+                sys.executable, '-m', 'yt_dlp', # <-- PERBAIKAN: Gunakan sys.executable
                 '--no-check-certificate',
                 '--geo-bypass',
                 '--no-playlist',
@@ -257,17 +248,12 @@ def download_media():
             
             # --- PERBAIKAN: Logika Audio vs Video yang Jelas ---
             if 'audio' in download_format.lower() or download_format == 'bestaudio/best':
-                # Opsi Audio Saja
                 print("Mode: Audio Saja. Mengonversi ke MP3...")
                 command.extend(['-x', '--audio-format', 'mp3'])
             else:
-                # Opsi Video (Resolusi apa pun)
                 print(f"Mode: Video. Memastikan container MP4 (Merge + Remux) untuk kompatibilitas...")
-                # Memaksa merge ke container MP4
                 command.extend(['--merge-output-format', 'mp4']) 
-                # Membersihkan/Mengemas ulang file akhir ke MP4 (Memperbaiki error play Windows)
                 command.extend(['--remux-video', 'mp4'])
-            # --- AKHIR PERBAIKAN ---
 
         
         # --- Jalankan Perintah ---
@@ -278,7 +264,7 @@ def download_media():
             command,
             capture_output=True,
             text=True,
-            check=False, # Jangan crash jika return code != 0
+            check=False, 
             encoding='utf-8',
             errors='replace', 
             timeout=DOWNLOAD_TIMEOUT
@@ -302,17 +288,14 @@ def download_media():
         print(f"Total file valid ditemukan (rekursif, >0 byte): {len(all_files)}")
 
         # --- PERBAIKAN LOGIKA CAROUSEL ---
-        # Tentukan file media (abaikan .txt, .json, dll.)
         media_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.mkv', '.webm', '.mov']
         media_files = [
             f for f in all_files 
             if os.path.splitext(f)[1].lower() in media_extensions
         ]
         print(f"Ditemukan {len(media_files)} file media.")
-        # --- AKHIR PERBAIKAN ---
 
         if not media_files:
-            # Jika tidak ada file media, cek return code
             if result.returncode != 0:
                 print(f"subprocess gagal DAN tidak ada file media yang ditemukan.")
                 error_detail = result.stderr
@@ -324,16 +307,13 @@ def download_media():
                     error_message = f"Gagal menjalankan {tool_used}."
                 return jsonify({"error": error_message, "details": error_detail}), 500
             else:
-                 # Sukses tapi 0 file media (kasus aneh)
                 raise Exception("Proses unduhan selesai tanpa error, tetapi tidak ada file media yang ditemukan.")
         
-        # Buat zip HANYA jika ada LEBIH DARI 1 file media
         elif len(media_files) > 1:
             print(f"Menemukan {len(media_files)} file media. Membuat file .zip...")
             zip_filename_no_ext = f"{unique_id}_gallery_{int(time.time())}"
             zip_base_path = os.path.join(DOWNLOAD_DIR, zip_filename_no_ext)
             
-            # Saat membuat zip, kita zip seluruh folder (termasuk .txt jika ada)
             shutil.make_archive(zip_base_path, 'zip', output_subdir)
             
             return_filename = f"{zip_filename_no_ext}.zip"
@@ -341,7 +321,6 @@ def download_media():
             print(f"File Zip dibuat: {return_filename}")
 
         else:
-            # Jika hanya ada 1 file media
             print("Menemukan 1 file media. Memindahkan ke direktori utama...")
             full_path = media_files[0]
             single_file_name = os.path.basename(full_path)
